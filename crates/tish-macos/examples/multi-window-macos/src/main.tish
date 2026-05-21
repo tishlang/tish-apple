@@ -1,0 +1,61 @@
+// Second window = second process (app.spawnPeer / macos.spawnPeer). postSessionMessage /
+// onSessionMessage share TISH_MACOS_SESSION_ID. MainApp vs PeerApp are separate roots to show
+// different UIs in each process (same binary). From this directory: npm install && npm run dev.
+
+import {
+  macos,
+  useState,
+  Window,
+  onSessionMessage,
+  postSessionMessage,
+} from "tish:macos"
+
+fn PeerApp() {
+  let [m, setM] = useState("")
+  onSessionMessage((ch, b) => {
+    if (ch === "demo") {
+      setM(b)
+    }
+  })
+  return (
+    <Window>
+      <div>
+        <text>{"Peer process"}</text>
+        <text>{m}</text>
+        <button onClick={() => postSessionMessage("demo", "pong from peer")}>
+          {"Reply to main"}
+        </button>
+      </div>
+    </Window>
+  )
+}
+
+fn MainApp() {
+  let [m, setM] = useState("")
+  onSessionMessage((ch, b) => {
+    if (ch === "demo") {
+      setM(b)
+    }
+  })
+  return (
+    <Window>
+      <div>
+        <text>{"Main — spawnPeer opens another process (same binary)."}</text>
+        <button onClick={() => macos.spawnPeer()}>{"Open peer window"}</button>
+        <button onClick={() => postSessionMessage("demo", "ping from main")}>
+          {"Send ping"}
+        </button>
+        <text>{m}</text>
+      </div>
+    </Window>
+  )
+}
+
+fn Root() {
+  if (macos.isPeerChild()) {
+    return PeerApp()
+  }
+  return MainApp()
+}
+
+macos.run(Root)

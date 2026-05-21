@@ -1,0 +1,15 @@
+{
+  "name": "ai-messenger-macos-example",
+  "private": true,
+  "version": "0.0.0",
+  "description": "AIM-style multi-window AI messenger mock (native markdown, prefs, snap)",
+  "dependencies": {
+    "tish-macos": "file:../.."
+  },
+  "scripts": {
+    "build": "cargo run --manifest-path ../../../tish/Cargo.toml -q -p tishlang -- build --target native --native-backend rust --feature full src/main.tish -o dist/ai-messenger-macos",
+    "dev": "npm run build && ./dist/ai-messenger-macos",
+    "run": "npm run dev",
+    "start": "npm run dev"
+  }
+}

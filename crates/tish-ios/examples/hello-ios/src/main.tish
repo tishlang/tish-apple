@@ -1,0 +1,22 @@
+// UIKit + Tish: `import { ios } from "tish:ios"` resolves tish-ios/package.json.
+//
+// From `examples/hello-ios/`: `npm install` then `npm run build`
+// (produces a staticlib for aarch64-apple-ios-sim).
+
+import { ios, useState } from "tish:ios"
+
+fn App() {
+  let [count, setCount] = useState(0)
+  return (
+    <div>
+      <h1>UIKit + Tish</h1>
+      <p>ios.run(App) maps this vnode tree to UIStackView / UILabel / UIButton.</p>
+      <div>
+        <span>{"Count: " + count}</span>
+        <button onClick={() => setCount(count + 1)}>{"Increment"}</button>
+      </div>
+    </div>
+  )
+}
+
+ios.run(App)

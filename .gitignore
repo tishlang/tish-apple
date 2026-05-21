@@ -1,0 +1,10 @@
+node_modules
+.next
+.env.local
+*.log
+.DS_Store
+.claude
+tsconfig.tsbuildinfo
+.dry-run
+target
+dist

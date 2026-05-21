@@ -1,0 +1,15 @@
+{
+  "name": "multi-window-macos-example",
+  "private": true,
+  "version": "0.0.0",
+  "description": "spawnPeer second process + postSessionMessage via distributed notifications",
+  "dependencies": {
+    "tish-macos": "file:../.."
+  },
+  "scripts": {
+    "build": "cargo run --manifest-path ../../../tish/Cargo.toml -q -p tishlang -- build --target native --native-backend rust src/main.tish -o dist/multi-window-macos",
+    "dev": "npm run build && ./dist/multi-window-macos",
+    "run": "npm run dev",
+    "start": "npm run dev"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "hello-ios-example",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Sample iOS staticlib: tishlang_ui JSX + tish:ios run()",
+  "dependencies": {
+    "tish-ios": "file:../../crates/tish-ios"
+  },
+  "scripts": {
+    "build": "cargo run --manifest-path ../../../tish/Cargo.toml -q -p tishlang -- build --target native --native-backend rust --crate-type staticlib --ios-triple aarch64-apple-ios-sim src/main.tish -o dist/hello-ios",
+    "build:device": "cargo run --manifest-path ../../../tish/Cargo.toml -q -p tishlang -- build --target native --native-backend rust --crate-type staticlib --ios-triple aarch64-apple-ios src/main.tish -o dist/hello-ios"
+  }
+}

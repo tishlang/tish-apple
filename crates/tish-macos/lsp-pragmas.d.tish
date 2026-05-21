@@ -1,0 +1,22 @@
+// LSP anchors for `tish-lsp`: go-to-definition and hover when there is no matching `pub fn`
+// (native objects are built with closures in Rust). Paths are relative to this package root
+// (the directory that contains `package.json` and `Cargo.toml`).
+//
+// Format: // @tish-source <dotted-symbol> <rel-path> <1-based-line> [| optional one-line hover]
+//
+// Line numbers point at the `m.insert(Arc::from("…")` site in `window_object()` in window_api.rs.
+
+// @tish-source window.title src/appkit/window_api.rs 254 | Current window title string (`NSWindow`).
+// @tish-source window.setTitle src/appkit/window_api.rs 261 | Sets the window title.
+// @tish-source window.innerWidth src/appkit/window_api.rs 272 | Content width in points; uses detail view bounds in split sidebars when applicable.
+// @tish-source window.innerHeight src/appkit/window_api.rs 289 | Content height in points; uses detail view bounds in split sidebars when applicable.
+// @tish-source window.setContentSize src/appkit/window_api.rs 306 | Sets the window content size (width, height).
+// @tish-source window.setMinContentSize src/appkit/window_api.rs 318 | Minimum content size.
+// @tish-source window.setMaxContentSize src/appkit/window_api.rs 330 | Maximum content size.
+// @tish-source window.minimize src/appkit/window_api.rs 342 | Miniaturize the window.
+// @tish-source window.zoom src/appkit/window_api.rs 352 | Zoom / maximize toggle.
+// @tish-source window.close src/appkit/window_api.rs 362 | Request close (`performClose:`).
+// @tish-source window.focus src/appkit/window_api.rs 372 | Make key and order front.
+// @tish-source window.snapToRegion src/appkit/window_api.rs 382 | Snap to named region (`left`, `right`, `maximize`, …).
+// @tish-source window.toggleSidebar src/appkit/window_api.rs 391 | Toggle split sidebar (`NSSplitViewController`).
+// @tish-source window.sidebarCollapsed src/appkit/window_api.rs 398 | Whether the sidebar pane is collapsed.

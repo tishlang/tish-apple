@@ -1,0 +1,23 @@
+{
+  "name": "tish-macos",
+  "version": "0.1.0",
+  "description": "AppKit native UI host for Tish JSX (tish:macos)",
+  "license": "MIT",
+  "scripts": {
+    "build:hello-macos": "cargo run --manifest-path ../../tish/Cargo.toml -q -p tishlang -- build --target native --native-backend rust examples/hello-macos/src/main.tish -o examples/hello-macos/dist/hello-macos",
+    "dev:hello-macos": "npm run build:hello-macos && ./examples/hello-macos/dist/hello-macos",
+    "build:kitchen-sink-macos": "cargo run --manifest-path ../../tish/Cargo.toml -q -p tishlang -- build --target native --native-backend rust examples/kitchen-sink-macos/src/main.tish -o examples/kitchen-sink-macos/dist/kitchen-sink-macos",
+    "dev:kitchen-sink-macos": "npm run build:kitchen-sink-macos && ./examples/kitchen-sink-macos/dist/kitchen-sink-macos",
+    "build:multi-window-macos": "cargo run --manifest-path ../../tish/Cargo.toml -q -p tishlang -- build --target native --native-backend rust examples/multi-window-macos/src/main.tish -o examples/multi-window-macos/dist/multi-window-macos",
+    "dev:multi-window-macos": "npm run build:multi-window-macos && ./examples/multi-window-macos/dist/multi-window-macos",
+    "build:multi-window-in-app-macos": "cargo run --manifest-path ../../tish/Cargo.toml -q -p tishlang -- build --target native --native-backend rust examples/multi-window-in-app-macos/src/main.tish -o examples/multi-window-in-app-macos/dist/multi-window-in-app-macos",
+    "dev:multi-window-in-app-macos": "npm run build:multi-window-in-app-macos && ./examples/multi-window-in-app-macos/dist/multi-window-in-app-macos",
+    "build:notes-glass": "cargo build -p notes-glass --release",
+    "build:notes-glass-alt": "cargo build -p notes-glass-alt --release"
+  },
+  "tish": {
+    "module": true,
+    "crate": "tish-macos",
+    "export": "macos_object"
+  }
+}

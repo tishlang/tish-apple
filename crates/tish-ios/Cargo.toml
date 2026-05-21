@@ -1,0 +1,32 @@
+[package]
+name = "tish-ios"
+version = "0.1.0"
+edition = "2021"
+description = "UIKit native host for Tish JSX (tish:ios)"
+license = "MIT"
+
+[dependencies]
+tish-apple-common = { path = "../tish-apple-common" }
+tishlang_core = { path = "../../../tish/crates/tish_core" }
+tishlang_ui = { path = "../../../tish/crates/tish_ui", default-features = false, features = ["runtime"] }
+tishlang_runtime = { path = "../../../tish/crates/tish_runtime" }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = { version = "0.6", default-features = true }
+objc2-foundation = { version = "0.3", default-features = true, features = ["block2"] }
+block2 = "0.6"
+objc2-ui-kit = { version = "0.3", default-features = true, features = [
+    "UIApplication",
+    "UIWindow",
+    "UIViewController",
+    "UIView",
+    "UILabel",
+    "UIButton",
+    "UIStackView",
+    "UIScrollView",
+    "UIColor",
+    "UIFont",
+    "UIScreen",
+    "UIScene",
+] }
+objc2-core-foundation = { version = "0.3", default-features = true, features = ["CFCGTypes"] }

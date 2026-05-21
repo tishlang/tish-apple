@@ -1,0 +1,15 @@
+{
+  "name": "hello-macos-example",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Sample native app: tishlang_ui JSX + tish:macos run()",
+  "dependencies": {
+    "tish-macos": "file:../.."
+  },
+  "scripts": {
+    "build": "cargo run --manifest-path ../../../tish/Cargo.toml -q -p tishlang -- build --target native --native-backend rust src/main.tish -o dist/hello-macos",
+    "dev": "npm run build && ./dist/hello-macos",
+    "run": "npm run dev",
+    "start": "npm run dev"
+  }
+}

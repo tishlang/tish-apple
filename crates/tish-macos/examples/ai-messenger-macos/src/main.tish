@@ -1,0 +1,382 @@
+// AIM-style mock: main chat list, per-chat windows, Settings, native markdown, prefs, snap.
+// From this directory: npm install && npm run dev
+
+import { macos, window, useState, useEffect, Window } from "tish:macos"
+
+fn prefBool(key, defaultVal) {
+  let s = macos.preferencesGet(key)
+  if (s === null) {
+    return defaultVal
+  }
+  return s === "1" || s === "true"
+}
+
+fn prefStr(key, defaultVal) {
+  let s = macos.preferencesGet(key)
+  if (s === null) {
+    return defaultVal
+  }
+  return s
+}
+
+fn initialChats() {
+  return [
+    {
+      id: "c1",
+      title: "GPT-4o",
+      preview: "Here is a short list…",
+      messages: [
+        { role: "user", text: "Hello — summarize Tish in one line." },
+        {
+          role: "assistant",
+          markdown:
+            "# Tish\n\nA **small language** with JSX-like UI and native macOS hosts.\n\n```\nmacos.run(App)\n```\n",
+          thinking: "Parsed request; chose minimal definition.",
+          attachmentNames: [],
+        },
+      ],
+    },
+    {
+      id: "c2",
+      title: "Local (LM Studio)",
+      preview: "Streaming deltas…",
+      messages: [
+        { role: "user", text: "Explain reasoning vs message deltas." },
+        {
+          role: "assistant",
+          markdown:
+            "OpenAI-style streams use `choices[0].delta`.\n\nLM Studio REST uses named events like `reasoning.delta` and `message.delta`.\n",
+          thinking: "Mapped both APIs for the user.",
+          attachmentNames: ["notes.txt"],
+        },
+      ],
+    },
+  ]
+}
+
+fn SettingsApp() {
+  let [notificationsEnabled, setNotificationsEnabled] = useState(prefBool("notificationsEnabled", true))
+  let [notifyBackgroundOnly, setNotifyBackgroundOnly] = useState(
+    prefBool("notifyBackgroundOnly", false)
+  )
+  let [notifyShowPreview, setNotifyShowPreview] = useState(prefBool("notifyShowPreview", true))
+  let [playSoundEnabled, setPlaySoundEnabled] = useState(prefBool("playSoundEnabled", true))
+  let soundNames = ["Glass", "Ping", "Submarine", "Tink", "None"]
+  let [soundIdx, setSoundIdx] = useState(0)
+
+  useEffect(
+    () => {
+      let saved = prefStr("chatSoundName", "Glass")
+      let i = 0
+      let j = 0
+      while (j < soundNames.length) {
+        if (soundNames[j] === saved) {
+          i = j
+        }
+        j = j + 1
+      }
+      setSoundIdx(i)
+    },
+    []
+  )
+
+  return (
+    <Window>
+      <ScrollView height={"fill"} direction="vertical" style={{ paddingLeft: 16, paddingRight: 16, paddingTop: 12 }}>
+        <Text style={{ fontSize: 18, fontWeight: "bold", color: "label", paddingBottom: 8 }}>{"Settings"}</Text>
+
+        <Text style={{ fontSize: 12, fontWeight: "semibold", color: "secondaryLabel", paddingTop: 8 }}>
+          {"Notifications"}
+        </Text>
+        <Row style={{ paddingTop: 6, paddingBottom: 4 }}>
+          <Text style={{ fontSize: 13, color: "label" }}>{"Enable notifications"}</Text>
+          <space width={12} height={8} />
+          <toggler
+            checked={notificationsEnabled}
+            onChange={(v) => {
+              setNotificationsEnabled(v)
+              macos.preferencesSet("notificationsEnabled", v ? "1" : "0")
+            }}
+          />
+        </Row>
+        <Row style={{ paddingTop: 4, paddingBottom: 4 }}>
+          <Text style={{ fontSize: 13, color: "label" }}>{"Only when in background"}</Text>
+          <space width={12} height={8} />
+          <toggler
+            checked={notifyBackgroundOnly}
+            onChange={(v) => {
+              setNotifyBackgroundOnly(v)
+              macos.preferencesSet("notifyBackgroundOnly", v ? "1" : "0")
+            }}
+          />
+        </Row>
+        <Row style={{ paddingTop: 4, paddingBottom: 12 }}>
+          <Text style={{ fontSize: 13, color: "label" }}>{"Show message preview"}</Text>
+          <space width={12} height={8} />
+          <toggler
+            checked={notifyShowPreview}
+            onChange={(v) => {
+              setNotifyShowPreview(v)
+              macos.preferencesSet("notifyShowPreview", v ? "1" : "0")
+            }}
+          />
+        </Row>
+
+        <rule />
+        <Text style={{ fontSize: 12, fontWeight: "semibold", color: "secondaryLabel", paddingTop: 8 }}>
+          {"Sounds"}
+        </Text>
+        <Row style={{ paddingTop: 6, paddingBottom: 6 }}>
+          <Text style={{ fontSize: 13, color: "label" }}>{"Play sound on new message"}</Text>
+          <space width={12} height={8} />
+          <toggler
+            checked={playSoundEnabled}
+            onChange={(v) => {
+              setPlaySoundEnabled(v)
+              macos.preferencesSet("playSoundEnabled", v ? "1" : "0")
+            }}
+          />
+        </Row>
+        <pick_list options={soundNames} selected={soundIdx} onChange={(i) => {
+          setSoundIdx(i)
+          macos.preferencesSet("chatSoundName", soundNames[i])
+        }} />
+        <Row style={{ paddingTop: 8 }}>
+          <Button
+            onClick={() => {
+              macos.playNamedSound(soundNames[soundIdx])
+            }}
+          >
+            {"Play sample"}
+          </Button>
+        </Row>
+
+        <Text
+          style={{
+            fontSize: 10,
+            color: "quaternaryLabel",
+            wrap: true,
+            paddingTop: 16,
+          }}
+        >
+          {"Prefs use NSUserDefaults keys under tish.aiMessenger.* — UNUserNotificationCenter is not wired yet."}
+        </Text>
+      </ScrollView>
+    </Window>
+  )
+}
+
+fn makeChatApp(chat) {
+  return () => {
+    let [messages, setMessages] = useState(chat.messages)
+    let [draft, setDraft] = useState("")
+    let [attachments, setAttachments] = useState([])
+    let [showImagePreview, setShowImagePreview] = useState(false)
+    let [thinkingIdx, setThinkingIdx] = useState(-1)
+
+    let send = () => {
+      let t = draft
+      if (t === "") {
+        return
+      }
+      let userMsg = { role: "user", text: t }
+      let reply = {
+        role: "assistant",
+        markdown:
+          "## Reply\n\nYou said: **"
+            + t
+            + "**\n\n- Item one\n- Item two\n\n```js\nconst x = 1;\n```\n",
+        thinking: "Considered tone and brevity before answering.",
+        attachmentNames: [],
+      }
+      let next = []
+      let i = 0
+      while (i < messages.length) {
+        next = next.concat([messages[i]])
+        i = i + 1
+      }
+      next = next.concat([userMsg, reply])
+      setMessages(next)
+      setDraft("")
+      let pN = macos.preferencesGet("notificationsEnabled")
+      let notifOn = pN === null ? true : (pN === "1" || pN === "true")
+      if (notifOn) {
+        let pB = macos.preferencesGet("notifyBackgroundOnly")
+        let bgOnly = pB === null ? false : (pB === "1" || pB === "true")
+        if (bgOnly) {
+          console.log("[notify stub] background-only (would check app active)")
+        } else {
+          console.log("[notify stub] would post UNUserNotificationCenter banner")
+        }
+        let pP = macos.preferencesGet("notifyShowPreview")
+        let preview = pP === null ? true : (pP === "1" || pP === "true")
+        if (preview) {
+          console.log("[notify stub] preview text enabled")
+        }
+      }
+      let pS = macos.preferencesGet("playSoundEnabled")
+      let soundOn = pS === null ? true : (pS === "1" || pS === "true")
+      if (soundOn) {
+        let sn = macos.preferencesGet("chatSoundName")
+        let snd = sn === null ? "Glass" : sn
+        macos.playNamedSound(snd)
+      }
+    }
+
+    let addMockAttach = () => {
+      let n = attachments.length + 1
+      setAttachments(attachments.concat(["mock-file-" + n + ".txt"]))
+    }
+
+    return (
+      <Window>
+        <ScrollView height={"fill"} direction="vertical" style={{ paddingLeft: 12, paddingRight: 12, paddingTop: 8 }}>
+          <Row style={{ paddingBottom: 8 }}>
+            <Button icon={"rectangle.lefthalf.filled"} bezelStyle={"toolbar"} height={28} onClick={() => window.snapToRegion("leftHalf")} />
+            <Button icon={"rectangle.righthalf.filled"} bezelStyle={"toolbar"} height={28} onClick={() => window.snapToRegion("rightHalf")} />
+            <Button icon={"arrow.up.left.and.arrow.down.right"} bezelStyle={"toolbar"} height={28} onClick={() => window.snapToRegion("maximizeVisible")} />
+          </Row>
+
+          {messages.map((msg, mi) => (
+            <div style={{ paddingBottom: 10 }}>
+              {msg.role === "user" ? (
+                <div style={{ backgroundColor: "#ffffff18", borderRadius: 8, paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6 }}>
+                  <Text style={{ fontSize: 13, color: "label", wrap: true }}>{msg.text}</Text>
+                </div>
+              ) : (
+                <div>
+                  {msg.thinking !== null && msg.thinking !== "" ? (
+                    <div style={{ paddingBottom: 6 }}>
+                      <Button
+                        bezelStyle={"accessoryBar"}
+                        height={24}
+                        onClick={() => setThinkingIdx(thinkingIdx === mi ? -1 : mi)}
+                      >
+                        {thinkingIdx === mi ? "▼ Thinking" : "▶ Thinking"}
+                      </Button>
+                      {thinkingIdx === mi ? (
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            color: "secondaryLabel",
+                            wrap: true,
+                            paddingTop: 4,
+                            fontFamily: "Menlo",
+                          }}
+                        >
+                          {msg.thinking}
+                        </Text>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <markdown_text markdown={msg.markdown} height={200} fontSize={13} />
+                  {msg.attachmentNames !== null && msg.attachmentNames.length > 0 ? (
+                    <Text style={{ fontSize: 11, color: "tertiaryLabel", paddingTop: 4, wrap: true }}>
+                      {"Attachments: " + msg.attachmentNames.join(", ")}
+                    </Text>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {showImagePreview ? (
+            <div style={{ paddingBottom: 8 }}>
+              <Text style={{ fontSize: 11, color: "secondaryLabel", paddingBottom: 4 }}>{"Image viewer (mock)"}</Text>
+              <image src={"photo"} symbol={true} height={140} />
+            </div>
+          ) : null}
+
+          {attachments.length > 0 ? (
+            <Text style={{ fontSize: 11, color: "secondaryLabel", wrap: true, paddingBottom: 6 }}>
+              {"Queued: " + attachments.join(", ")}
+            </Text>
+          ) : null}
+
+          <rule />
+          <TextEditor height={100} minHeight={80} fontSize={14} value={draft} onChange={(s) => setDraft(s)} />
+          <Row style={{ paddingTop: 8, paddingBottom: 8 }}>
+            <Button icon={"paperclip"} bezelStyle={"toolbar"} height={28} onClick={() => addMockAttach()} />
+            <Button icon={"doc.on.clipboard"} bezelStyle={"toolbar"} height={28} onClick={() => console.log("[paste image stub] NSPasteboard TBD")} />
+            <Button icon={"photo"} bezelStyle={"toolbar"} height={28} onClick={() => setShowImagePreview(!showImagePreview)} />
+            <space width={16} height={8} />
+            <Button onClick={() => send()}>{"Send"}</Button>
+          </Row>
+        </ScrollView>
+      </Window>
+    )
+  }
+}
+
+fn MainApp() {
+  let [chats, setChats] = useState(initialChats())
+
+  let openSettings = () => {
+    let h = macos.openWindow(SettingsApp, { title: "Settings" })
+    h.show()
+  }
+
+  let openChat = (chat) => {
+    let mount = makeChatApp(chat)
+    let h = macos.openWindow(mount, { title: chat.title })
+    h.show()
+  }
+
+  let newChat = () => {
+    let nc = {
+      id: "new-" + chats.length,
+      title: "New chat",
+      preview: "",
+      messages: [
+        {
+          role: "assistant",
+          markdown: "Say **hi** — this is a fresh thread (mock).",
+          thinking: "",
+          attachmentNames: [],
+        },
+      ],
+    }
+    setChats([nc].concat(chats))
+  }
+
+  return (
+    <Window>
+      <ScrollView height={"fill"} direction="vertical" style={{ paddingLeft: 14, paddingRight: 14, paddingTop: 10 }}>
+        <Row style={{ paddingBottom: 10 }}>
+          <Text style={{ fontSize: 20, fontWeight: "bold", color: "label" }}>{"Chats"}</Text>
+          <space width={12} height={8} />
+          <Button icon={"gearshape"} bezelStyle={"toolbar"} height={28} onClick={() => openSettings()} />
+          <space width={8} height={8} />
+          <Button onClick={() => newChat()}>{"New"}</Button>
+        </Row>
+        <Row style={{ paddingBottom: 8 }}>
+          <Button icon={"rectangle.lefthalf.filled"} bezelStyle={"toolbar"} height={28} onClick={() => window.snapToRegion("leftHalf")} />
+          <Button icon={"rectangle.righthalf.filled"} bezelStyle={"toolbar"} height={28} onClick={() => window.snapToRegion("rightHalf")} />
+          <Button icon={"arrow.up.left.and.arrow.down.right"} bezelStyle={"toolbar"} height={28} onClick={() => window.snapToRegion("maximizeVisible")} />
+        </Row>
+
+        {chats.map((c) => (
+            <Button
+            bezelStyle={"accessoryBar"}
+            height={56}
+            style={{
+              marginBottom: 6,
+              borderRadius: 8,
+              paddingLeft: 8,
+              paddingRight: 8,
+            }}
+            onClick={() => openChat(c)}
+          >
+            {c.title + "\n" + c.preview}
+          </Button>
+        ))}
+
+        <Text style={{ fontSize: 10, color: "quaternaryLabel", paddingTop: 8, wrap: true }}>
+          {"OpenAI stream: merge delta.content / reasoning_content. LM Studio: reasoning.delta + message.delta. See README."}
+        </Text>
+      </ScrollView>
+    </Window>
+  )
+}
+
+macos.run(MainApp, { title: "Chats" })

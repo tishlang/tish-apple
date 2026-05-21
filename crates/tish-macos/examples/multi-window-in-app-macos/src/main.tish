@@ -1,0 +1,80 @@
+// Same process, second NSWindow via macos.openWindow(DetailApp, { title }). One Dock icon.
+// Handle includes nsWindow (per-window API) and show(). From this directory: npm install && npm run dev.
+
+import { macos, window, useState, useEffect, Window } from "tish:macos"
+
+const delay = 1;
+
+fn TimerTest() {
+  const [show, setShow] = useState(false)
+  let [n, setN] = useState(0)
+
+
+  useEffect(
+    () => {
+      let timer2 = null
+      let timer1 = setTimeout(() => {
+        setShow(true)
+        setN((p) => p + 1)
+        timer2 = setInterval(() => {
+          setN((p) => p + 1)
+        }, delay * 1000)
+      }, delay * 1000)
+      return () => {
+        clearTimeout(timer1)
+        clearInterval(timer2)
+      }
+    },
+    []
+  )
+
+  return show ? (
+    <div>show is true, {delay}seconds passed {n}</div>
+  ) : (
+    <div>show is false, wait {delay}seconds {n}</div>
+  )
+}
+
+fn DetailApp() {
+  let [n, setN] = useState(0)
+  useEffect(() => {
+    console.log("Detail window opened via effect")
+  }, [])
+  return (
+    <Window onOpen={() => console.log("Detail window opened")}>
+      <TimerTest />
+      <div>
+        <text>{"Auxiliary window — own Tish root."}</text>
+        <text>{"Count: " + n}</text>
+        <button onClick={() => setN(n + 1)}>+1</button>
+        <button onClick={() => window.setTitle("Detail — retitled")}>
+          Title via global window (this root)
+        </button>
+      </div>
+    </Window>
+  )
+}
+
+fn MainApp() {
+  return (
+    <Window onOpen={() => console.log("Main window opened")}>
+      <div>
+        <text>{"Main — openWindow adds another window in-process."}</text>
+        <text>test</text>
+        <button
+          onClick={() => {
+            let h = macos.openWindow(DetailApp, { title: "Detail" })
+            h.show()
+          }}
+        >
+          Open auxiliary window
+        </button>
+        <button onClick={() => window.setTitle("Main — retitled")}>
+          {"Rename this window"}
+        </button>
+      </div>
+    </Window>
+  )
+}
+
+macos.run(MainApp)

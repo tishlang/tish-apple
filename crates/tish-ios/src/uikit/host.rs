@@ -1,7 +1,11 @@
 //! `IosHost` — `tishlang_ui::runtime::Host` backed by a single `UIWindow`.
 
 use std::cell::RefCell;
+use std::ptr::NonNull;
+use std::sync::atomic::{AtomicBool, Ordering};
 
+use block2::RcBlock;
+use objc2_foundation::NSTimer;
 use objc2::rc::Retained;
 use objc2::{MainThreadMarker, MainThreadOnly};
 use objc2_ui_kit::{UIWindow, UIScreen, UIView, UIViewAutoresizing, UIViewController};
@@ -94,4 +98,19 @@ pub fn ensure_ios_window(mtm: MainThreadMarker) -> (Retained<UIWindow>, Retained
         *slot.borrow_mut() = Some((pair.0.clone(), pair.1.clone()));
         pair
     })
+}
+
+/// Pump `setTimeout` / `setInterval` on the main run loop so async work can yield between UI updates.
+pub fn install_timer_drain_pump() {
+    static STARTED: AtomicBool = AtomicBool::new(false);
+    if STARTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let block = RcBlock::new(move |_timer: NonNull<NSTimer>| {
+        tishlang_runtime::drain_timers();
+    });
+    let _timer = unsafe {
+        NSTimer::scheduledTimerWithTimeInterval_repeats_block(0.032, true, &*block)
+    };
+    drop(_timer);
 }

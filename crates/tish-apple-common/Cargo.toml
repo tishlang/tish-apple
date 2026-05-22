@@ -13,4 +13,5 @@ tishlang_ui = { path = "../../../tish/crates/tish_ui", default-features = false,
 objc2-app-kit = { version = "0.3", default-features = true }
 
 [target.'cfg(target_os = "ios")'.dependencies]
-objc2-ui-kit = { version = "0.3", default-features = true }
+objc2 = { version = "0.6", default-features = true }
+objc2-ui-kit = { version = "0.3", default-features = true, features = ["UIView", "UIColor"] }

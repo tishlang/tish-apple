@@ -13,7 +13,7 @@ tishlang_runtime = { path = "../../../tish/crates/tish_runtime" }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 objc2 = { version = "0.6", default-features = true }
-objc2-foundation = { version = "0.3", default-features = true, features = ["block2"] }
+objc2-foundation = { version = "0.3", default-features = true, features = ["NSTimer", "block2"] }
 block2 = "0.6"
 objc2-ui-kit = { version = "0.3", default-features = true, features = [
     "UIApplication",
@@ -28,5 +28,12 @@ objc2-ui-kit = { version = "0.3", default-features = true, features = [
     "UIFont",
     "UIScreen",
     "UIScene",
+    "UIImage",
+    "UIImageView",
 ] }
-objc2-core-foundation = { version = "0.3", default-features = true, features = ["CFCGTypes"] }
+objc2-core-foundation = { version = "0.3", default-features = true, features = ["CFCGTypes", "CFData"] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = [
+    "CGColorSpace",
+    "CGDataProvider",
+    "CGImage",
+] }

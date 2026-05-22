@@ -6,7 +6,7 @@ mod router;
 
 use std::sync::Arc;
 
-use host::IosHost;
+use host::{install_timer_drain_pump, IosHost};
 use tishlang_core::{ObjectMap, Value};
 use tishlang_ui::runtime::{
     install_host_for_root, native_create_root, LEGACY_ROOT_ID,
@@ -19,6 +19,7 @@ pub fn ios_run(args: &[Value]) -> Value {
     };
 
     let mtm = objc2::MainThreadMarker::new().expect("ios.run must run on the main thread");
+    install_timer_drain_pump();
     install_host_for_root(LEGACY_ROOT_ID, Box::new(IosHost::new(mtm, LEGACY_ROOT_ID)));
     let root_obj = native_create_root(&[Value::Null]);
     if let Value::Object(obj) = root_obj {

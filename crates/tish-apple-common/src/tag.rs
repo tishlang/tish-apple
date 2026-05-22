@@ -34,6 +34,7 @@ pub fn canonical_host_tag(tag: &str) -> &str {
         "Radio" | "radio" => "radio",
         "Rule" | "rule" | "separator" | "divider" => "rule",
         "SceneView" | "scene_view" | "scene" => "scene_view",
+        "CardArt" | "card_art" | "cardart" => "card_art",
         "Tab" | "tab" => "tab",
         "div" => "column",
         _ => tag,

@@ -1,7 +1,7 @@
 {
   "folders": [
     { "path": ".", "name": "tish-macos" },
-    { "path": "../tish", "name": "tish-compiler" }
+    { "path": "../../../tish", "name": "tish-compiler" }
   ],
   "settings": {
     "tish.languageServerPath": "${workspaceFolder:tish-compiler}/target/debug/tish-lsp",

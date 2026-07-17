@@ -10,7 +10,7 @@ use objc2_app_kit::{
 };
 use objc2_core_foundation::CGFloat;
 
-use tishlang_core::{ObjectMap, Value};
+use tishlang_core::{ObjectMap, PropMap, Value};
 use tishlang_ui::runtime::Host;
 
 use super::build::{
@@ -25,7 +25,7 @@ use super::toolbar_delegate::TishToolbarDelegate;
 use super::window_delegate::TishWindowDelegate;
 
 /// When absent, the unified titlebar `NSToolbar` is shown (legacy behavior).
-fn sidebar_titlebar_toolbar_enabled(eff: &ObjectMap) -> bool {
+fn sidebar_titlebar_toolbar_enabled(eff: &PropMap) -> bool {
     const KEYS: &[&str] = &[
         "titlebarToolbar",
         "titlebar_toolbar",
@@ -155,14 +155,14 @@ impl MacosSidebarHost {
         let is_sidebar = matches!(
             m.get("tag"),
             Some(tishlang_core::Value::String(s)) if {
-                let t = s.as_ref();
+                let t = s.as_str();
                 t == "sidebar_window" || t == "SidebarWindow"
             }
         );
         if !is_sidebar {
             return;
         }
-        let raw = vnode_props(&m);
+        let raw = vnode_props(m);
         let eff = effective_props(&raw);
         clear_toolbar_handlers(self.ctx.root_id);
         let tb_cb = eff
@@ -172,7 +172,7 @@ impl MacosSidebarHost {
                 Value::Function(f) => {
                     let f = f.clone();
                     Some(Rc::new(move |id: String| {
-                        let _ = f(&[Value::String(id.into())]);
+                        let _ = f.call(&[Value::String(id.into())]);
                     }) as Rc<dyn Fn(String)>)
                 }
                 _ => None,

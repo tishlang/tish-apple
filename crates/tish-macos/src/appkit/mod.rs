@@ -8,7 +8,6 @@ mod markdown_view;
 mod prefs;
 mod deferred_host;
 mod style;
-mod tag;
 mod flipped;
 mod handlers;
 mod window_delegate;
@@ -39,7 +38,7 @@ use objc2_app_kit::{
 };
 use objc2_core_foundation::{CGPoint, CGSize};
 use objc2_foundation::{NSRect, NSString, NSTimer};
-use tishlang_core::{ObjectMap, Value};
+use tishlang_core::{ObjectMap, PropMap, Value};
 use dispatch2::DispatchQueue;
 use tishlang_ui::runtime::{
     alloc_root_id, install_host_for_root, native_create_root, with_host_for_root, Host, RootId,
@@ -48,6 +47,15 @@ use tishlang_ui::runtime::{
 use tishlang_ui::ui_h;
 
 pub use build::BuildCtx;
+
+pub(super) use tish_apple_common::tag::canonical_host_tag;
+
+fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
+    pm.iter()
+        .map(|(k, v)| (std::sync::Arc::clone(k), v.clone()))
+        .collect()
+}
+
 pub use flipped::{FlippedRootView, FlippedSplitPaneRootView};
 
 use build::{commit_root_into, window_shell_effective_props};
@@ -107,7 +115,7 @@ fn run_with_sidebar_toolbar_chrome_options(value: Option<&Value>) -> (bool, bool
     )
 }
 
-fn optional_bool_prop(m: &ObjectMap, keys: &[&str], default: bool) -> bool {
+fn optional_bool_prop(m: &PropMap, keys: &[&str], default: bool) -> bool {
     for k in keys {
         if let Some(v) = m.get(*k) {
             return match v {
@@ -125,7 +133,7 @@ fn root_is_sidebar_vnode(v: &Value) -> bool {
     match v {
         Value::Object(o) => match o.borrow().strings.get("tag") {
             Some(Value::String(s)) => {
-                let t = s.as_ref();
+                let t = s.as_str();
                 t == "sidebar_window" || t == "SidebarWindow"
             }
             _ => false,
@@ -139,7 +147,7 @@ fn toolbar_chrome_from_sidebar_vnode(v: &Value) -> (bool, bool) {
         return (true, true);
     }
     let props_val = match v {
-        Value::Object(o) => Value::object(build::vnode_props(&o.borrow().strings)),
+        Value::Object(o) => Value::object(propmap_to_object_map(&build::vnode_props(&o.borrow().strings))),
         _ => Value::Null,
     };
     run_with_sidebar_toolbar_chrome_options(Some(&props_val))
@@ -460,7 +468,7 @@ pub(super) fn apply_window_appearance_to_window(window: &NSWindow, name: Option<
 }
 
 /// Per-view appearance override (`appearance` / `nsAppearance` on vnode or inside `style`).
-pub(super) fn apply_view_appearance_from_props(view: &NSView, props: &ObjectMap) {
+pub(super) fn apply_view_appearance_from_props(view: &NSView, props: &PropMap) {
     let Some(raw) = build::appearance_string_from_props(props) else {
         return;
     };
@@ -496,8 +504,8 @@ fn open_layout_from_opts(args: &[Value], default: OpenLayout) -> OpenLayout {
     };
     let m = &o.borrow().strings;
     match m.get("layout") {
-        Some(Value::String(s)) if s.as_ref() == "sidebar" => OpenLayout::Sidebar,
-        Some(Value::String(s)) if s.as_ref() == "content" => OpenLayout::Content,
+        Some(Value::String(s)) if s.as_str() == "sidebar" => OpenLayout::Sidebar,
+        Some(Value::String(s)) if s.as_str() == "content" => OpenLayout::Content,
         _ => default,
     }
 }
@@ -745,7 +753,7 @@ fn macos_prepare_window_for_root(
     let root_obj = native_create_root(&[Value::Number(root_id as f64)]);
     if let Value::Object(obj) = root_obj {
         if let Some(Value::Function(render)) = obj.borrow().strings.get("render") {
-            render(&[app_fn]);
+            render.call(&[app_fn]);
         }
     }
     Some(())
@@ -784,7 +792,7 @@ fn macos_shell_element(tag: &'static str, args: &[Value]) -> Value {
                 .unwrap_or_else(|| Value::array(vec![]));
             let mut map = m.clone();
             map.remove(&Arc::from("children"));
-            (Value::object(map), ch)
+            (Value::object(propmap_to_object_map(&map)), ch)
         }
         _ => (
             Value::Null,
@@ -869,7 +877,7 @@ fn macos_run(args: &[Value]) -> Value {
     let root_obj = native_create_root(&[Value::Null]);
     if let Value::Object(obj) = root_obj {
         if let Some(Value::Function(render)) = obj.borrow().strings.get("render") {
-            render(&[app_fn]);
+            render.call(&[app_fn]);
         }
     }
 
@@ -884,7 +892,7 @@ fn macos_run(args: &[Value]) -> Value {
     if auto_show {
         if let Value::Object(hm) = &handle {
             if let Some(Value::Function(show_fn)) = hm.borrow().strings.get("show") {
-                show_fn(&[]);
+                show_fn.call(&[]);
             }
         }
     }

@@ -10,8 +10,28 @@ crates/
   tish-macos/          AppKit host (`tish:macos`)
   tish-ios/            UIKit host (`tish:ios`)
 examples/
+  hello-macos/         AppKit sample
   hello-ios/           staticlib + Xcode shell (simulator)
 ```
+
+## hello-macos
+
+```bash
+cd crates/tish-macos
+npm run build:hello-macos
+npm run dev:hello-macos
+```
+
+Or from the workspace example:
+
+```bash
+cd examples/hello-macos
+npm install
+npm run build
+./dist/hello-macos
+```
+
+Apps under `~/Projects/tish/` resolve `tish:macos` via `tish-apple/crates/tish-macos` (compiler walk-up). Outside that tree, use a `file:` dependency on `crates/tish-macos`.
 
 ## hello-ios
 

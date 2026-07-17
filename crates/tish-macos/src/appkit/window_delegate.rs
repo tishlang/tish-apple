@@ -18,7 +18,7 @@ use objc2::{define_class, msg_send, DefinedClass, MainThreadMarker, MainThreadOn
 use dispatch2::{DispatchQueue, DispatchTime};
 use objc2_app_kit::{NSWindow, NSWindowDelegate};
 use objc2_foundation::{NSNotification, NSObject, NSObjectProtocol};
-use tishlang_core::{ObjectMap, Value};
+use tishlang_core::{ObjectMap, PropMap, Value};
 use tishlang_ui::runtime::{
     drop_host_for_root, unregister_root_hooks_and_effects, with_host_for_root, RootId,
 };
@@ -39,7 +39,7 @@ pub struct TishWindowDelegateIvars {
     last_zoomed: Cell<bool>,
 }
 
-fn prop_fn(props: &ObjectMap, keys: &[&str]) -> Option<Value> {
+fn prop_fn(props: &PropMap, keys: &[&str]) -> Option<Value> {
     for k in keys {
         if let Some(v) = props.get(*k) {
             if matches!(v, Value::Function(_)) {
@@ -55,7 +55,7 @@ fn invoke_cb(cell: &RefCell<Option<Value>>) {
     let Some(Value::Function(f)) = f_opt else {
         return;
     };
-    let _ = f(&[]);
+    let _ = f.call(&[]);
 }
 
 define_class!(
@@ -120,7 +120,7 @@ impl TishWindowDelegate {
     }
 
     /// Call after `props` change (each root commit). Resets zoom tracking from the live window.
-    pub fn sync_from_props(&self, props: &ObjectMap, window: &NSWindow) {
+    pub fn sync_from_props(&self, props: &PropMap, window: &NSWindow) {
         *self.ivars().on_open.borrow_mut() = prop_fn(props, &["onOpen", "on_open"]);
         *self.ivars().on_close.borrow_mut() = prop_fn(props, &["onClose", "on_close"]);
         *self.ivars().on_minimize.borrow_mut() = prop_fn(props, &["onMinimize", "on_minimize"]);

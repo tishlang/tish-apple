@@ -4,10 +4,12 @@ use objc2::rc::Retained;
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSColor, NSFont, NSTextAlignment, NSTextField, NSTextView, NSView};
 use objc2_core_foundation::CGFloat;
-use tishlang_core::{ObjectMap, Value};
+use tish_apple_common::style::{props_bool, props_f64, props_string};
+pub(super) use tish_apple_common::style::parse_hex_color;
+use tishlang_core::{PropMap, Value};
 
 /// Returns true if layer-backed view styling from merged props should apply.
-pub(super) fn has_container_layer_style(props: &ObjectMap) -> bool {
+pub(super) fn has_container_layer_style(props: &PropMap) -> bool {
     let bg_significant = match props_string(props, &["backgroundColor", "background"]) {
         Some(ref s) => {
             let t = s.trim().to_ascii_lowercase();
@@ -22,48 +24,8 @@ pub(super) fn has_container_layer_style(props: &ObjectMap) -> bool {
         || props_string(props, &["borderColor"]).is_some()
 }
 
-fn props_string(props: &ObjectMap, keys: &[&str]) -> Option<String> {
-    for k in keys {
-        if let Some(Value::String(s)) = props.get(*k) {
-            return Some(s.to_string());
-        }
-    }
-    None
-}
 
-fn props_f64(props: &ObjectMap, keys: &[&str], default: f64) -> f64 {
-    for k in keys {
-        if let Some(n) = props.get(*k).and_then(|v| v.as_number()) {
-            return n;
-        }
-    }
-    default
-}
 
-/// Parse `#RGB`, `#RRGGBB`, `#RRGGBBAA` into sRGB components (0..1) and alpha.
-pub(super) fn parse_hex_color(s: &str) -> Option<(f64, f64, f64, f64)> {
-    let t = s.trim();
-    let hex = t.strip_prefix('#')?;
-    let bytes: Vec<u8> = (0..hex.len())
-        .step_by(2)
-        .filter_map(|i| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok())
-        .collect();
-    match bytes.len() {
-        3 => Some((
-            bytes[0] as f64 / 255.0,
-            bytes[1] as f64 / 255.0,
-            bytes[2] as f64 / 255.0,
-            1.0,
-        )),
-        4 => Some((
-            bytes[0] as f64 / 255.0,
-            bytes[1] as f64 / 255.0,
-            bytes[2] as f64 / 255.0,
-            bytes[3] as f64 / 255.0,
-        )),
-        _ => None,
-    }
-}
 
 /// Hex, basic keywords, and dynamic AppKit semantic colors (`label`, `controlAccent`, …).
 pub(super) fn resolve_ns_color(s: &str) -> Option<Retained<NSColor>> {
@@ -91,7 +53,7 @@ pub(super) fn resolve_ns_color(s: &str) -> Option<Retained<NSColor>> {
     }
 }
 
-pub(super) fn apply_layer_style_to_view(view: &NSView, props: &ObjectMap) {
+pub(super) fn apply_layer_style_to_view(view: &NSView, props: &PropMap) {
     let bg = props_string(props, &["backgroundColor", "background"]);
     let bg_paint = bg.as_deref().and_then(|s| {
         let t = s.trim().to_ascii_lowercase();
@@ -147,8 +109,8 @@ pub(super) fn apply_layer_style_to_view(view: &NSView, props: &ObjectMap) {
 
 /// `NSTextView` document fill: default is transparent (`drawsBackground` false) so `NSVisualEffectView`
 /// shows through; opt in with `drawsBackground` + optional `backgroundColor` / `background`.
-pub(super) fn apply_nstext_view_document_background_from_props(tv: &NSTextView, props: &ObjectMap) {
-    let draw = props_bool(props, &["drawsBackground", "draws_background"]);
+pub(super) fn apply_nstext_view_document_background_from_props(tv: &NSTextView, props: &PropMap) {
+    let draw = props_bool(props, &["drawsBackground", "draws_background"], false);
     tv.setDrawsBackground(draw);
     if draw {
         if let Some(ref s) = props_string(props, &["backgroundColor", "background"]) {
@@ -159,22 +121,8 @@ pub(super) fn apply_nstext_view_document_background_from_props(tv: &NSTextView, 
     }
 }
 
-fn props_bool(props: &ObjectMap, keys: &[&str]) -> bool {
-    for k in keys {
-        match props.get(*k) {
-            Some(Value::Bool(b)) => return *b,
-            Some(v) => {
-                if let Some(n) = v.as_number() {
-                    return n != 0.0;
-                }
-            }
-            None => {}
-        }
-    }
-    false
-}
 
-fn font_weight_from_props(props: &ObjectMap) -> f64 {
+fn font_weight_from_props(props: &PropMap) -> f64 {
     match props.get("fontWeight") {
         Some(Value::Number(n)) => *n,
         Some(Value::String(s)) => {
@@ -193,7 +141,7 @@ fn font_weight_from_props(props: &ObjectMap) -> f64 {
 
 /// Non-editable label fields: no bezel, no background fill, adapts to dark mode via `labelColor` when
 /// `style.color` is omitted.
-pub(super) fn apply_static_label_text_field(tf: &NSTextField, props: &ObjectMap, mtm: MainThreadMarker) {
+pub(super) fn apply_static_label_text_field(tf: &NSTextField, props: &PropMap, mtm: MainThreadMarker) {
     tf.setBezeled(false);
     tf.setEditable(false);
     tf.setDrawsBackground(false);
@@ -204,7 +152,7 @@ pub(super) fn apply_static_label_text_field(tf: &NSTextField, props: &ObjectMap,
     }
 }
 
-pub(super) fn apply_text_style(tf: &NSTextField, props: &ObjectMap, mtm: MainThreadMarker) {
+pub(super) fn apply_text_style(tf: &NSTextField, props: &PropMap, mtm: MainThreadMarker) {
     let size = props_f64(props, &["fontSize"], 0.0);
     let w = font_weight_from_props(props);
     if size > 0.0 {
@@ -240,7 +188,7 @@ pub(super) fn ns_font_line_height(font: &NSFont) -> f64 {
     (asc - desc + lead).ceil().max(1.0)
 }
 
-fn explicit_label_height_from_props(props: &ObjectMap) -> Option<f64> {
+fn explicit_label_height_from_props(props: &PropMap) -> Option<f64> {
     for k in ["height", "h"] {
         if let Some(n) = props.get(k).and_then(|v| v.as_number()) {
             if n > 0.0 {
@@ -253,7 +201,7 @@ fn explicit_label_height_from_props(props: &ObjectMap) -> Option<f64> {
 
 /// Frame height for a non-wrapping static label after [`apply_static_label_text_field`].
 /// Uses font metrics so `Row` `alignItems: "center"` lines up with compact views (e.g. SF Symbol rows).
-pub(super) fn single_line_label_height_after_style(tf: &NSTextField, props: &ObjectMap) -> f64 {
+pub(super) fn single_line_label_height_after_style(tf: &NSTextField, props: &PropMap) -> f64 {
     if let Some(h) = explicit_label_height_from_props(props) {
         return h;
     }

@@ -17,7 +17,7 @@ use objc2_app_kit::{
 };
 use objc2_core_foundation::{CGPoint, CGSize};
 use objc2_foundation::{NSEdgeInsets, NSRect, NSString};
-use tishlang_core::ObjectMap;
+use tishlang_core::{ObjectMap, PropMap};
 use tishlang_core::Value;
 
 use super::build::{
@@ -27,7 +27,7 @@ use super::build::{
 use super::flipped::{FlippedClipView, FlippedDocumentView, FlippedVisualEffectView};
 use super::scroll_chrome_embed::mark_grouped_table_scroll;
 use super::style::apply_static_label_text_field;
-use super::tag::canonical_host_tag;
+use super::canonical_host_tag;
 
 /// Width reserved for a **legacy** vertical scroller (`NSScrollerStyle::Legacy`) so document rows
 /// match the clip view and do not sit under the knob.
@@ -67,7 +67,7 @@ fn group_header_plain_view(mtm: MainThreadMarker, title: &str, width: f64) -> Re
     );
     let holder_ns: &NSView = unsafe { &*std::ptr::from_ref(&*holder).cast::<NSView>() };
     let tf = NSTextField::labelWithString(&NSString::from_str(title), mtm);
-    apply_static_label_text_field(&tf, &ObjectMap::default(), mtm);
+    apply_static_label_text_field(&tf, &PropMap::default(), mtm);
     let font = NSFont::systemFontOfSize_weight(11.0, unsafe { NSFontWeightSemibold });
     tf.setFont(Some(&font));
     tf.setTextColor(Some(&NSColor::secondaryLabelColor()));
@@ -90,7 +90,7 @@ fn group_header_material_view(mtm: MainThreadMarker, title: &str, width: f64) ->
     fx.setState(NSVisualEffectState::FollowsWindowActiveState);
     fx.setFrame(NSRect::new(CGPoint::ZERO, CGSize::new(width.max(1.0), h)));
     let tf = NSTextField::labelWithString(&NSString::from_str(title), mtm);
-    apply_static_label_text_field(&tf, &ObjectMap::default(), mtm);
+    apply_static_label_text_field(&tf, &PropMap::default(), mtm);
     let font = NSFont::systemFontOfSize_weight(11.0, unsafe { NSFontWeightSemibold });
     tf.setFont(Some(&font));
     tf.setTextColor(Some(&NSColor::labelColor()));
@@ -122,14 +122,14 @@ pub(super) fn build_grouped_table_rows(
         let tag = sm
             .get("tag")
             .and_then(|t| match t {
-                Value::String(s) => Some(s.as_ref().to_string()),
+                Value::String(s) => Some(s.as_str().to_string()),
                 _ => None,
             })
             .unwrap_or_default();
         if canonical_host_tag(tag.as_str()) != "section" {
             continue;
         }
-        let raw = vnode_props(&sm);
+        let raw = vnode_props(sm);
         let title = raw
             .get("title")
             .or_else(|| raw.get("label"))
@@ -145,7 +145,7 @@ pub(super) fn build_grouped_table_rows(
             height: 28.0,
         });
         let mut row_vnodes = Vec::new();
-        collect_element_vnodes(&vnode_children(&sm), &mut row_vnodes);
+        collect_element_vnodes(&vnode_children(sm), &mut row_vnodes);
         for rv in row_vnodes {
             let holder = FlippedDocumentView::new(
                 ctx.mtm,

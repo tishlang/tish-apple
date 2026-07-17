@@ -6,7 +6,7 @@
 use std::collections::HashSet;
 use std::sync::Mutex;
 
-use tishlang_core::ObjectMap;
+use tishlang_core::{ObjectMap, PropMap};
 
 static SEEN: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 
@@ -30,7 +30,7 @@ fn prop_key_allowed(key: &str, allowed: &[&str]) -> bool {
 }
 
 /// Log unknown keys in `props` for `tag` once per `(tag, key)` pair.
-pub(crate) fn warn_unknown_props(tag: &str, props: &ObjectMap, allowed: &[&str]) {
+pub(crate) fn warn_unknown_props(tag: &str, props: &PropMap, allowed: &[&str]) {
     if !macos_warn_unknown_props_enabled() {
         return;
     }

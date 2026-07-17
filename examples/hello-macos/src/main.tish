@@ -1,0 +1,23 @@
+// Native AppKit window: JSX via tishlang_ui; `import { macos } from "tish:macos"` resolves tish-macos/package.json.
+//
+// From `examples/hello-macos/`: `npm install` then `npm run dev`
+// (or from `tish-macos/` root: `npm run dev:hello-macos` after `npm install` in the example).
+// `macos.run(App)` matches `tish-iced` / `tish-native-ui`: the host installs, then `createRoot` + `render` run in Rust.
+
+import { macos, useState } from "tish:macos"
+
+fn App() {
+  let [count, setCount] = useState(0)
+  return (
+    <div>
+      <h1>AppKit + Tish</h1>
+      <p>macos.run(App) maps this vnode tree to AppKit NSView / NSButton / NSTextField.</p>
+      <div>
+        <span>{"Count: " + count}</span>
+        <button onClick={() => setCount(count + 1)}>{"Increment"}</button>
+      </div>
+    </div>
+  )
+}
+
+macos.run(App)

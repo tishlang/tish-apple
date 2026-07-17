@@ -15,7 +15,7 @@ use objc2_app_kit::{
 use objc2_core_foundation::{CGFloat, CGSize};
 use objc2_foundation::{NSObjectProtocol, NSString, NSURL, NSURLRequest};
 use objc2_web_kit::WKWebView;
-use tishlang_core::{ObjectMap, Value};
+use tishlang_core::{ObjectMap, PropMap, Value};
 use tishlang_ui::runtime::is_fragment_tag;
 
 use super::build::{
@@ -37,14 +37,14 @@ use super::style::{
     single_line_label_height_after_style,
 };
 use super::markdown_view::{apply_markdown_text_view_chrome, set_text_view_markdown};
-use super::tag::canonical_host_tag;
+use super::canonical_host_tag;
 use super::handlers::{
     decode_control_tag, install_text_change_tag_on_text_view, register_bool_handler,
     register_click_handler, register_f64_handler, register_pick_handler,
     register_text_change_handler, text_change_tag_from_text_view, update_bool_handler,
     update_click_handler, update_f64_handler, update_pick_handler, update_text_change_handler,
 };
-fn wire_on_click_patch(props: &ObjectMap, btn: &NSButton, ctx: &BuildCtx, existing_tag: isize) {
+fn wire_on_click_patch(props: &PropMap, btn: &NSButton, ctx: &BuildCtx, existing_tag: isize) {
     if let Some(Value::Function(f)) = props.get("onClick").or_else(|| props.get("onclick")) {
         let f = f.clone();
         let idx = if existing_tag >= 0 {
@@ -53,12 +53,12 @@ fn wire_on_click_patch(props: &ObjectMap, btn: &NSButton, ctx: &BuildCtx, existi
                 rid,
                 slot,
                 Rc::new(move || {
-                    let _ = f(&[]);
+                    let _ = f.call(&[]);
                 }),
             )
         } else {
             register_click_handler(ctx.root_id, Rc::new(move || {
-                let _ = f(&[]);
+                let _ = f.call(&[]);
             }))
         };
         btn.setTag(idx);
@@ -76,12 +76,12 @@ fn tab_label_and_children(tab: &Value) -> (String, Vec<Value>) {
             let m = &o.borrow().strings;
             let is_tab = matches!(
                 m.get("tag"),
-                Some(Value::String(s)) if canonical_host_tag(s.as_ref()) == "tab"
+                Some(Value::String(s)) if canonical_host_tag(s.as_str()) == "tab"
             );
-            let p = vnode_props(&m);
+            let p = vnode_props(m);
             let lbl = props_string(&p, &["label", "title", "name"]).unwrap_or_else(|| "Tab".into());
             let ch = if is_tab {
-                vnode_children(&m)
+                vnode_children(m)
             } else {
                 vec![tab.clone()]
             };
@@ -99,8 +99,8 @@ pub fn vnode_same_shape(a: &Value, b: &Value) -> bool {
             let mb = &ob.borrow().strings;
             let ta = ma.get("tag").unwrap_or(&Value::Null);
             if is_fragment_tag(ta) {
-                let ca = vnode_children(&ma);
-                let cb = vnode_children(&mb);
+                let ca = vnode_children(ma);
+                let cb = vnode_children(mb);
                 return ca.len() == cb.len()
                     && ca
                         .iter()
@@ -110,14 +110,14 @@ pub fn vnode_same_shape(a: &Value, b: &Value) -> bool {
             let sa = ma
                 .get("tag")
                 .and_then(|t| match t {
-                    Value::String(s) => Some(s.as_ref().to_string()),
+                    Value::String(s) => Some(s.as_str().to_string()),
                     _ => None,
                 })
                 .unwrap_or_default();
             let sb = mb
                 .get("tag")
                 .and_then(|t| match t {
-                    Value::String(s) => Some(s.as_ref().to_string()),
+                    Value::String(s) => Some(s.as_str().to_string()),
                     _ => None,
                 })
                 .unwrap_or_default();
@@ -127,8 +127,8 @@ pub fn vnode_same_shape(a: &Value, b: &Value) -> bool {
                 return false;
             }
             if ca == "row" {
-                let po = effective_props(&vnode_props(&ma));
-                let pn = effective_props(&vnode_props(&mb));
+                let po = effective_props(&vnode_props(ma));
+                let pn = effective_props(&vnode_props(mb));
                 let shell_o =
                     has_container_layer_style(&po) || row_wants_click_overlay(&po);
                 let shell_n =
@@ -137,8 +137,8 @@ pub fn vnode_same_shape(a: &Value, b: &Value) -> bool {
                     return false;
                 }
             }
-            let ca = vnode_children(&ma);
-            let cb = vnode_children(&mb);
+            let ca = vnode_children(ma);
+            let cb = vnode_children(mb);
             ca.len() == cb.len()
                 && ca
                     .iter()
@@ -309,11 +309,11 @@ fn patch_vnode(
                 return Err(());
             }
             let tf: &NSTextField = unsafe { &*(std::ptr::from_ref(&*v).cast()) };
-            if sa.as_ref().trim() != sb.as_ref().trim() {
-                tf.setStringValue(&NSString::from_str(sb.as_ref().trim()));
+            if sa.as_str().trim() != sb.as_str().trim() {
+                tf.setStringValue(&NSString::from_str(sb.as_str().trim()));
             }
-            apply_static_label_text_field(tf, &ObjectMap::default(), ctx.mtm);
-            let h = single_line_label_height_after_style(tf, &ObjectMap::default());
+            apply_static_label_text_field(tf, &PropMap::default(), ctx.mtm);
+            let h = single_line_label_height_after_style(tf, &PropMap::default());
             place(&*v, x, y_top, avail_w, h);
             freeze_autoresizing_for_manual_frames(&*v);
             *slot += 1;
@@ -323,8 +323,8 @@ fn patch_vnode(
             let om = &oa.borrow().strings;
             if is_fragment_tag(om.get("tag").unwrap_or(&Value::Null)) {
                 let nm = &ob.borrow().strings;
-                let ch_old = vnode_children(&om);
-                let ch_new = vnode_children(&nm);
+                let ch_old = vnode_children(om);
+                let ch_new = vnode_children(nm);
                 if ch_old.len() != ch_new.len() {
                     return Err(());
                 }
@@ -341,7 +341,7 @@ fn patch_vnode(
             let tag_o = om
                 .get("tag")
                 .and_then(|t| match t {
-                    Value::String(s) => Some(s.as_ref().to_string()),
+                    Value::String(s) => Some(s.as_str().to_string()),
                     _ => None,
                 })
                 .unwrap_or_default();
@@ -349,7 +349,7 @@ fn patch_vnode(
             let tag_n = nm
                 .get("tag")
                 .and_then(|t| match t {
-                    Value::String(s) => Some(s.as_ref().to_string()),
+                    Value::String(s) => Some(s.as_str().to_string()),
                     _ => None,
                 })
                 .unwrap_or_default();
@@ -357,8 +357,8 @@ fn patch_vnode(
                 return Err(());
             }
             let tag = canonical_host_tag(tag_n.as_str());
-            let props = effective_props(&vnode_props(&nm));
-            let children = vnode_children(&nm);
+            let props = effective_props(&vnode_props(nm));
+            let children = vnode_children(nm);
             let (pt, pr, pb, pl) = padding_insets(&props);
             let ix = x + pl;
             let iy = y_top + pt;
@@ -396,7 +396,7 @@ fn patch_vnode(
                     Ok(out)
                 }
                 "row" => {
-                    let och = vnode_children(&om);
+                    let och = vnode_children(om);
                     let n = children.len().max(1);
                     let click_overlay = row_wants_click_overlay(&props);
                     let align = row_cross_align(&props);
@@ -478,7 +478,7 @@ fn patch_vnode(
                     }
                 }
                 "column" | "section" => {
-                    let och = vnode_children(&om);
+                    let och = vnode_children(om);
                     if och.len() != children.len() {
                         return Err(());
                     }
@@ -551,16 +551,13 @@ fn patch_vnode(
                         0.0,
                     )
                     .max(0.0);
-                    scroll.setDrawsBackground(props_bool(
-                        &props,
-                        &["drawsBackground", "draws_background"],
-                    ));
+                    scroll.setDrawsBackground(props_bool(&props, &["drawsBackground", "draws_background"], false));
                     place(scroll, ix, iy, iw, sh);
                     let doc = scroll.documentView().ok_or(())?;
                     if !doc.isFlipped() {
                         return Err(());
                     }
-                    let och = vnode_children(&om);
+                    let och = vnode_children(om);
                     let mut inner = 0usize;
                     let mut doc_h = doc_top;
                     let mut dy = doc_top;
@@ -609,7 +606,7 @@ fn patch_vnode(
                     }
                     let tf: &NSTextField = unsafe { &*(std::ptr::from_ref(&*v).cast()) };
                     let text = label_text_from_children(&children);
-                    let wrap = props_bool(&props, &["wrap", "wrapping"]);
+                    let wrap = props_bool(&props, &["wrap", "wrapping"], false);
                     let cur = tf.stringValue().to_string();
                     if cur != text {
                         tf.setStringValue(&NSString::from_str(&text));
@@ -649,12 +646,12 @@ fn patch_vnode(
                                 rid,
                                 slot,
                                 Rc::new(move |s: String| {
-                                    let _ = f(&[Value::String(s.into())]);
+                                    let _ = f.call(&[Value::String(s.into())]);
                                 }),
                             )
                         } else {
                             register_text_change_handler(ctx.root_id, Rc::new(move |s: String| {
-                                let _ = f(&[Value::String(s.into())]);
+                                let _ = f.call(&[Value::String(s.into())]);
                             }))
                         };
                         tf.setTag(idx);
@@ -692,12 +689,12 @@ fn patch_vnode(
                                 rid,
                                 slot,
                                 Rc::new(move |s: String| {
-                                    let _ = f(&[Value::String(s.into())]);
+                                    let _ = f.call(&[Value::String(s.into())]);
                                 }),
                             )
                         } else {
                             register_text_change_handler(ctx.root_id, Rc::new(move |s: String| {
-                                let _ = f(&[Value::String(s.into())]);
+                                let _ = f.call(&[Value::String(s.into())]);
                             }))
                         };
                         tf.setTag(idx);
@@ -720,7 +717,7 @@ fn patch_vnode(
                     }
                     let btn: &NSButton = unsafe { &*(std::ptr::from_ref(&*v).cast()) };
                     btn.setTitle(&NSString::from_str(&label_text_from_children(&children)));
-                    let checked = props_bool(&props, &["checked", "value"]);
+                    let checked = props_bool(&props, &["checked", "value"], false);
                     btn.setState(if checked {
                         NSControlStateValueOn
                     } else {
@@ -737,12 +734,12 @@ fn patch_vnode(
                                 rid,
                                 slot,
                                 Rc::new(move |b| {
-                                    let _ = f(&[Value::Bool(b)]);
+                                    let _ = f.call(&[Value::Bool(b)]);
                                 }),
                             )
                         } else {
                             register_bool_handler(ctx.root_id, Rc::new(move |b| {
-                                let _ = f(&[Value::Bool(b)]);
+                                let _ = f.call(&[Value::Bool(b)]);
                             }))
                         };
                         btn.setTag(idx);
@@ -761,7 +758,7 @@ fn patch_vnode(
                 "toggler" => {
                     let v = subview(parent, *slot).ok_or(())?;
                     let sw = unsafe { as_switch(&*v).ok_or(())? };
-                    sw.setState(if props_bool(&props, &["checked", "value"]) {
+                    sw.setState(if props_bool(&props, &["checked", "value"], false) {
                         NSControlStateValueOn
                     } else {
                         NSControlStateValueOff
@@ -777,12 +774,12 @@ fn patch_vnode(
                                 rid,
                                 slot,
                                 Rc::new(move |b| {
-                                    let _ = f(&[Value::Bool(b)]);
+                                    let _ = f.call(&[Value::Bool(b)]);
                                 }),
                             )
                         } else {
                             register_bool_handler(ctx.root_id, Rc::new(move |b| {
-                                let _ = f(&[Value::Bool(b)]);
+                                let _ = f.call(&[Value::Bool(b)]);
                             }))
                         };
                         sw.setTag(idx);
@@ -817,12 +814,12 @@ fn patch_vnode(
                                 rid,
                                 slot,
                                 Rc::new(move |v| {
-                                    let _ = f(&[Value::Number(v)]);
+                                    let _ = f.call(&[Value::Number(v)]);
                                 }),
                             )
                         } else {
                             register_f64_handler(ctx.root_id, Rc::new(move |v| {
-                                let _ = f(&[Value::Number(v)]);
+                                let _ = f.call(&[Value::Number(v)]);
                             }))
                         };
                         sl.setTag(idx);
@@ -841,7 +838,7 @@ fn patch_vnode(
                 "progress_bar" => {
                     let v = subview(parent, *slot).ok_or(())?;
                     let pi = unsafe { as_progress(&*v).ok_or(())? };
-                    let ind = props_bool(&props, &["indeterminate"]);
+                    let ind = props_bool(&props, &["indeterminate"], false);
                     if ind != pi.isIndeterminate() {
                         return Err(());
                     }
@@ -883,12 +880,12 @@ fn patch_vnode(
                                 rid,
                                 slot,
                                 Rc::new(move |i| {
-                                    let _ = f(&[Value::Number(i as f64)]);
+                                    let _ = f.call(&[Value::Number(i as f64)]);
                                 }),
                             )
                         } else {
                             register_pick_handler(ctx.root_id, Rc::new(move |i| {
-                                let _ = f(&[Value::Number(i as f64)]);
+                                let _ = f.call(&[Value::Number(i as f64)]);
                             }))
                         };
                         popup.setTag(idx);
@@ -932,14 +929,14 @@ fn patch_vnode(
                                     slot,
                                     Rc::new(move |on| {
                                         if on {
-                                            let _ = f(&[Value::Number(ii)]);
+                                            let _ = f.call(&[Value::Number(ii)]);
                                         }
                                     }),
                                 )
                             } else {
                                 register_bool_handler(ctx.root_id, Rc::new(move |on| {
                                     if on {
-                                        let _ = f(&[Value::Number(ii)]);
+                                        let _ = f.call(&[Value::Number(ii)]);
                                     }
                                 }))
                             };
@@ -963,7 +960,7 @@ fn patch_vnode(
                     let v = subview(parent, *slot).ok_or(())?;
                     let iv = unsafe { as_image_view(&*v).ok_or(())? };
                     let src = props_string(&props, &["src", "path", "url"]).unwrap_or_default();
-                    let use_symbol = props_bool(&props, &["symbol", "sfSymbol", "sf_symbol"]);
+                    let use_symbol = props_bool(&props, &["symbol", "sfSymbol", "sf_symbol"], false);
                     let img = if use_symbol {
                         let sym = NSString::from_str(&src);
                         NSImage::imageWithSystemSymbolName_accessibilityDescription(&sym, None)
@@ -1019,7 +1016,7 @@ fn patch_vnode(
                     } else {
                         wrap_v.setToolTip(None);
                     }
-                    let och = vnode_children(&om);
+                    let och = vnode_children(om);
                     let h_pass = if och.len() == 1 { avail_h } else { None };
                     let mut inner = 0usize;
                     let mut y = 0.0;
@@ -1042,10 +1039,7 @@ fn patch_vnode(
                     let scroll_view = subview(parent, *slot).ok_or(())?;
                     let scroll = unsafe { as_scroll(&*scroll_view).ok_or(())? };
                     let th = scroll_outer_height(&props, avail_h);
-                    scroll.setDrawsBackground(props_bool(
-                        &props,
-                        &["drawsBackground", "draws_background"],
-                    ));
+                    scroll.setDrawsBackground(props_bool(&props, &["drawsBackground", "draws_background"], false));
                     place(scroll, ix, iy, iw, th);
                     let doc = scroll.documentView().ok_or(())?;
                     if !doc.isKindOfClass(NSTextField::class()) {
@@ -1078,10 +1072,7 @@ fn patch_vnode(
                     let base_h = scroll_outer_height(&props, avail_h);
                     let min_h = props_f64(&props, &["minHeight", "min_height"], 120.0);
                     let th = base_h.max(min_h);
-                    scroll.setDrawsBackground(props_bool(
-                        &props,
-                        &["drawsBackground", "draws_background"],
-                    ));
+                    scroll.setDrawsBackground(props_bool(&props, &["drawsBackground", "draws_background"], false));
                     place(scroll, ix, iy, iw, th);
                     let doc = scroll.documentView().ok_or(())?;
                     if !doc.isKindOfClass(NSTextView::class()) {
@@ -1111,12 +1102,12 @@ fn patch_vnode(
                                 rid,
                                 slot_i,
                                 Rc::new(move |s: String| {
-                                    let _ = f(&[Value::String(s.into())]);
+                                    let _ = f.call(&[Value::String(s.into())]);
                                 }),
                             )
                         } else {
                             register_text_change_handler(ctx.root_id, Rc::new(move |s: String| {
-                                let _ = f(&[Value::String(s.into())]);
+                                let _ = f.call(&[Value::String(s.into())]);
                             }))
                         };
                         install_text_change_tag_on_text_view(tv, idx);
@@ -1146,17 +1137,14 @@ fn patch_vnode(
                     let base_h = scroll_outer_height(&props, avail_h);
                     let min_h = props_f64(&props, &["minHeight", "min_height"], 120.0);
                     let th = base_h.max(min_h);
-                    scroll.setDrawsBackground(props_bool(
-                        &props,
-                        &["drawsBackground", "draws_background"],
-                    ));
+                    scroll.setDrawsBackground(props_bool(&props, &["drawsBackground", "draws_background"], false));
                     place(scroll, ix, iy, iw, th);
                     let doc = scroll.documentView().ok_or(())?;
                     if !doc.isKindOfClass(NSTextView::class()) {
                         return Err(());
                     }
                     let tv: &NSTextView = unsafe { &*(std::ptr::from_ref(&*doc).cast()) };
-                    let raw_old = vnode_props(&om);
+                    let raw_old = vnode_props(om);
                     let old_props = effective_props(&raw_old);
                     let old_md = props_string(&old_props, &["markdown", "value", "defaultValue"])
                         .unwrap_or_default();
@@ -1185,7 +1173,7 @@ fn patch_vnode(
                     if n != children.len() {
                         return Err(());
                     }
-                    let old_tabs = vnode_children(&om);
+                    let old_tabs = vnode_children(om);
                     for ti in 0..n {
                         let old_tab = old_tabs.get(ti).ok_or(())?;
                         let new_tab = children.get(ti).ok_or(())?;
@@ -1227,7 +1215,7 @@ fn patch_vnode(
                     split.setVertical(split_uses_vertical_divider(&props));
                     split.setDividerStyle(split_divider_style(&props));
                     let (w0, h0, w1, h1, pos) = split_pane_layout(&props, iw, th);
-                    let och = vnode_children(&om);
+                    let och = vnode_children(om);
                     let o_panes = split_pane_vnodes(&och);
                     let n_panes = split_pane_vnodes(&children);
                     if o_panes.len() < 2 || n_panes.len() < 2 {
@@ -1306,7 +1294,7 @@ fn patch_vnode(
                     if !doc.isFlipped() {
                         return Err(());
                     }
-                    let och = vnode_children(&om);
+                    let och = vnode_children(om);
                     let mut inner = 0usize;
                     let mut doc_h = 0.0;
                     let mut dy = 0.0;
@@ -1357,7 +1345,7 @@ fn patch_vnode(
                 }
                 _ => {
                     let boxv = subview(parent, *slot).ok_or(())?;
-                    let och = vnode_children(&om);
+                    let och = vnode_children(om);
                     let h_pass = if och.len() == 1 { avail_h } else { None };
                     let mut inner = 0usize;
                     let mut y = 0.0;

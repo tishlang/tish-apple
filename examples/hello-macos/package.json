@@ -1,0 +1,12 @@
+{
+  "name": "hello-macos",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "tish-macos": "file:../../crates/tish-macos"
+  },
+  "scripts": {
+    "build": "cargo run --manifest-path ../../../tish/Cargo.toml -q -p tishlang -- build --target native --native-backend rust src/main.tish -o dist/hello-macos",
+    "dev": "npm run build && ./dist/hello-macos"
+  }
+}

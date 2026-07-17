@@ -21,7 +21,15 @@ use objc2_app_kit::{
 use objc2_core_foundation::{CGFloat, CGPoint, CGSize};
 use objc2_foundation::{NSEdgeInsets, NSObjectProtocol, NSRect, NSString, NSURL, NSURLRequest};
 use objc2_web_kit::WKWebView;
-use tishlang_core::{ObjectMap, Value};
+pub(super) use tish_apple_common::style::{props_bool, props_f64, props_string};
+use tishlang_core::{ObjectMap, PropMap, Value};
+
+fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
+    pm.iter()
+        .map(|(k, v)| (std::sync::Arc::clone(k), v.clone()))
+        .collect()
+}
+
 use tishlang_ui::runtime::{is_fragment_tag, RootId};
 
 use super::flipped::{
@@ -44,7 +52,7 @@ use super::style::{
     apply_static_label_text_field, has_container_layer_style, resolve_ns_color,
     single_line_label_height_after_style,
 };
-use super::tag::canonical_host_tag;
+use super::canonical_host_tag;
 use super::text_delegate::TextFieldDelegate;
 use super::text_view_delegate::TextViewDelegate;
 
@@ -125,7 +133,7 @@ unsafe fn detach_hooks_rec(view: &NSView) {
     }
 }
 
-pub(super) fn vnode_children(obj: &ObjectMap) -> Vec<Value> {
+pub(super) fn vnode_children(obj: &PropMap) -> Vec<Value> {
     match obj.get("children") {
         Some(Value::Array(a)) => a.borrow().clone(),
         _ => vec![],
@@ -141,7 +149,7 @@ pub(super) fn collect_element_vnodes(children: &[Value], out: &mut Vec<Value>) {
                 let m = &o.borrow().strings;
                 let tag = m.get("tag").unwrap_or(&Value::Null);
                 if is_fragment_tag(tag) {
-                    let inner = vnode_children(&m);
+                    let inner = vnode_children(m);
                     collect_element_vnodes(&inner, out);
                 } else if matches!(tag, Value::String(_)) {
                     out.push(c.clone());
@@ -180,14 +188,14 @@ pub(super) fn macos_window_content(v: &Value) -> Option<Value> {
             let ok = matches!(
                 m.get("tag"),
                 Some(Value::String(s)) if {
-                    let t = s.as_ref();
+                    let t = s.as_str();
                     t == "macos_window" || t == "Window"
                 }
             );
             if !ok {
                 return None;
             }
-            let ch = vnode_children(&m);
+            let ch = vnode_children(m);
             collect_single_content_child(&ch)
         }
         _ => None,
@@ -195,21 +203,21 @@ pub(super) fn macos_window_content(v: &Value) -> Option<Value> {
 }
 
 /// Effective props on a root `<Window>` / `<macos_window>` (e.g. `onClose`, `onOpen`).
-pub(super) fn macos_window_shell_props(root: &Value) -> Option<ObjectMap> {
+pub(super) fn macos_window_shell_props(root: &Value) -> Option<PropMap> {
     match root {
         Value::Object(o) => {
             let m = &o.borrow().strings;
             let ok = matches!(
                 m.get("tag"),
                 Some(Value::String(s)) if {
-                    let t = s.as_ref();
+                    let t = s.as_str();
                     t == "macos_window" || t == "Window"
                 }
             );
             if !ok {
                 return None;
             }
-            let raw = vnode_props(&m);
+            let raw = vnode_props(m);
             Some(effective_props(&raw))
         }
         _ => None,
@@ -217,21 +225,21 @@ pub(super) fn macos_window_shell_props(root: &Value) -> Option<ObjectMap> {
 }
 
 /// Effective props on a root `<SidebarWindow>` / `<sidebar_window>`.
-pub(super) fn sidebar_window_shell_props(root: &Value) -> Option<ObjectMap> {
+pub(super) fn sidebar_window_shell_props(root: &Value) -> Option<PropMap> {
     match root {
         Value::Object(o) => {
             let m = &o.borrow().strings;
             let ok = matches!(
                 m.get("tag"),
                 Some(Value::String(s)) if {
-                    let t = s.as_ref();
+                    let t = s.as_str();
                     t == "sidebar_window" || t == "SidebarWindow"
                 }
             );
             if !ok {
                 return None;
             }
-            let raw = vnode_props(&m);
+            let raw = vnode_props(m);
             Some(effective_props(&raw))
         }
         _ => None,
@@ -239,7 +247,7 @@ pub(super) fn sidebar_window_shell_props(root: &Value) -> Option<ObjectMap> {
 }
 
 /// Shell props for whichever window root tag is in use, or empty (callbacks cleared).
-pub(super) fn window_shell_effective_props(root: &Value) -> ObjectMap {
+pub(super) fn window_shell_effective_props(root: &Value) -> PropMap {
     macos_window_shell_props(root)
         .or_else(|| sidebar_window_shell_props(root))
         .unwrap_or_default()
@@ -253,14 +261,14 @@ pub(super) fn sidebar_window_children(v: &Value) -> Option<(Value, Value)> {
             let ok = matches!(
                 m.get("tag"),
                 Some(Value::String(s)) if {
-                    let t = s.as_ref();
+                    let t = s.as_str();
                     t == "sidebar_window" || t == "SidebarWindow"
                 }
             );
             if !ok {
                 return None;
             }
-            let ch = vnode_children(&m);
+            let ch = vnode_children(m);
             let mut panes = Vec::new();
             collect_element_vnodes(&ch, &mut panes);
             if panes.len() != 2 {
@@ -272,48 +280,18 @@ pub(super) fn sidebar_window_children(v: &Value) -> Option<(Value, Value)> {
     }
 }
 
-pub(super) fn vnode_props(obj: &ObjectMap) -> ObjectMap {
+pub(super) fn vnode_props(obj: &PropMap) -> PropMap {
     match obj.get("props") {
         Some(Value::Object(p)) => p.borrow().strings.clone(),
-        _ => ObjectMap::default(),
+        _ => PropMap::default(),
     }
 }
 
-pub(super) fn props_string(props: &ObjectMap, keys: &[&str]) -> Option<String> {
-    for k in keys {
-        if let Some(Value::String(s)) = props.get(*k) {
-            return Some(s.to_string());
-        }
-    }
-    None
-}
 
-pub(super) fn props_f64(props: &ObjectMap, keys: &[&str], default: f64) -> f64 {
-    for k in keys {
-        if let Some(n) = props.get(*k).and_then(|v| v.as_number()) {
-            return n;
-        }
-    }
-    default
-}
 
-pub(super) fn props_bool(props: &ObjectMap, keys: &[&str]) -> bool {
-    for k in keys {
-        match props.get(*k) {
-            Some(Value::Bool(b)) => return *b,
-            Some(v) => {
-                if let Some(n) = v.as_number() {
-                    return n != 0.0;
-                }
-            }
-            None => {}
-        }
-    }
-    false
-}
 
 /// Like [`props_bool`] but returns **`None`** if no key is present (for tri-state defaults).
-pub(super) fn props_opt_bool(props: &ObjectMap, keys: &[&str]) -> Option<bool> {
+pub(super) fn props_opt_bool(props: &PropMap, keys: &[&str]) -> Option<bool> {
     for k in keys {
         if let Some(v) = props.get(*k) {
             return Some(match v {
@@ -327,7 +305,7 @@ pub(super) fn props_opt_bool(props: &ObjectMap, keys: &[&str]) -> Option<bool> {
     None
 }
 
-pub(super) fn padding_insets(props: &ObjectMap) -> (f64, f64, f64, f64) {
+pub(super) fn padding_insets(props: &PropMap) -> (f64, f64, f64, f64) {
     let p = props_f64(props, &["padding"], 0.0);
     let pt = props_f64(props, &["paddingTop"], p);
     let pr = props_f64(props, &["paddingRight"], p);
@@ -337,8 +315,8 @@ pub(super) fn padding_insets(props: &ObjectMap) -> (f64, f64, f64, f64) {
 }
 
 /// Shallow merge: clone `props` without `style`, then overlay keys from `props.style` (object).
-pub(super) fn effective_props(props: &ObjectMap) -> ObjectMap {
-    let mut out = ObjectMap::default();
+pub(super) fn effective_props(props: &PropMap) -> PropMap {
+    let mut out = PropMap::default();
     for (k, v) in props.iter() {
         if k.as_ref() == "style" {
             continue;
@@ -401,13 +379,13 @@ fn push_toolbar_string_token(t: &str, out: &mut Vec<ToolbarEntry>) {
 }
 
 /// `SidebarWindow` / `macos_window`: optional forced appearance name (`darkAqua`, …).
-pub(super) fn appearance_string_from_props(props: &ObjectMap) -> Option<String> {
+pub(super) fn appearance_string_from_props(props: &PropMap) -> Option<String> {
     props_string(props, &["appearance", "nsAppearance"])
 }
 
 /// Declarative toolbar: `toolbar` vnodes or `toolbarItems` (strings and `{ symbol, id, label? }` objects).
 pub(super) fn toolbar_entries_from_props(
-    props: &ObjectMap,
+    props: &PropMap,
     root_id: RootId,
 ) -> Option<Vec<ToolbarEntry>> {
     let mut out = Vec::new();
@@ -415,11 +393,11 @@ pub(super) fn toolbar_entries_from_props(
         for v in a.borrow().iter() {
             if let Value::Object(o) = v {
                 let m = &o.borrow().strings;
-                if let Some(sym) = props_string(&m, &["symbol", "sfSymbol", "sf_symbol"]) {
-                    let action_id = props_string(&m, &["id", "actionId", "action_id"])
+                if let Some(sym) = props_string(m, &["symbol", "sfSymbol", "sf_symbol"]) {
+                    let action_id = props_string(m, &["id", "actionId", "action_id"])
                         .unwrap_or_else(|| "item".to_string());
                     let label =
-                        props_string(&m, &["label", "toolTip", "tooltip"]).unwrap_or_default();
+                        props_string(m, &["label", "toolTip", "tooltip"]).unwrap_or_default();
                     let slot = register_toolbar_action_slot(root_id, action_id);
                     let ident_s = format!("com.tish.toolbar.{root_id}.{slot}");
                     let ident = NSString::from_str(&ident_s);
@@ -453,11 +431,11 @@ pub(super) fn toolbar_entries_from_props(
         for v in a.borrow().iter() {
             if let Value::Object(o) = v {
                 let m = &o.borrow().strings;
-                if let Some(sym) = props_string(&m, &["symbol", "sfSymbol", "sf_symbol"]) {
-                    let action_id = props_string(&m, &["id", "actionId", "action_id"])
+                if let Some(sym) = props_string(m, &["symbol", "sfSymbol", "sf_symbol"]) {
+                    let action_id = props_string(m, &["id", "actionId", "action_id"])
                         .unwrap_or_else(|| "item".to_string());
                     let label =
-                        props_string(&m, &["label", "toolTip", "tooltip"]).unwrap_or_default();
+                        props_string(m, &["label", "toolTip", "tooltip"]).unwrap_or_default();
                     let slot = register_toolbar_action_slot(root_id, action_id);
                     let ident_s = format!("com.tish.toolbar.{root_id}.{slot}");
                     let ident = NSString::from_str(&ident_s);
@@ -480,7 +458,7 @@ pub(super) fn toolbar_entries_from_props(
     None
 }
 
-pub(super) fn split_divider_style(props: &ObjectMap) -> NSSplitViewDividerStyle {
+pub(super) fn split_divider_style(props: &PropMap) -> NSSplitViewDividerStyle {
     match props_string(props, &["dividerStyle", "divider"]).as_deref() {
         Some("thick") => NSSplitViewDividerStyle::Thick,
         Some("pane") | Some("paneSplitter") | Some("pane_splitter") => {
@@ -494,7 +472,7 @@ pub(super) fn split_divider_style(props: &ObjectMap) -> NSSplitViewDividerStyle 
 ///
 /// - **`orientation="horizontal"`** (default): two **columns**, vertical divider; position is the **leading pane width**.
 /// - **`orientation="vertical"`** | **`stacked`**: two **rows**, horizontal divider; position is the **top pane height**.
-pub(super) fn split_uses_vertical_divider(props: &ObjectMap) -> bool {
+pub(super) fn split_uses_vertical_divider(props: &PropMap) -> bool {
     !matches!(
         props_string(props, &["orientation"])
             .map(|s| s.to_ascii_lowercase())
@@ -504,7 +482,7 @@ pub(super) fn split_uses_vertical_divider(props: &ObjectMap) -> bool {
 }
 
 /// Pane sizes `(w0, h0, w1, h1)` and divider position along the active axis for `setPosition:ofDividerAtIndex:`.
-pub(super) fn split_pane_layout(props: &ObjectMap, iw: f64, th: f64) -> (f64, f64, f64, f64, f64) {
+pub(super) fn split_pane_layout(props: &PropMap, iw: f64, th: f64) -> (f64, f64, f64, f64, f64) {
     if split_uses_vertical_divider(props) {
         let default_half = (iw / 2.0).max(1.0);
         let pos = props_f64(props, &["dividerPosition", "splitPosition"], default_half);
@@ -520,7 +498,7 @@ pub(super) fn split_pane_layout(props: &ObjectMap, iw: f64, th: f64) -> (f64, f6
     }
 }
 
-pub(super) fn visual_effect_material_from_props(props: &ObjectMap) -> NSVisualEffectMaterial {
+pub(super) fn visual_effect_material_from_props(props: &PropMap) -> NSVisualEffectMaterial {
     if let Some(v) = props.get("material") {
         if let Some(n) = v.as_number() {
             if n.is_finite() {
@@ -582,7 +560,7 @@ pub(super) fn visual_effect_material_from_props(props: &ObjectMap) -> NSVisualEf
     }
 }
 
-pub(super) fn visual_effect_blending_from_props(props: &ObjectMap) -> NSVisualEffectBlendingMode {
+pub(super) fn visual_effect_blending_from_props(props: &PropMap) -> NSVisualEffectBlendingMode {
     let s = props_string(props, &["blendingMode", "blending"]).unwrap_or_default();
     match s.to_ascii_lowercase().as_str() {
         "withinwindow" | "within_window" => NSVisualEffectBlendingMode::WithinWindow,
@@ -591,7 +569,7 @@ pub(super) fn visual_effect_blending_from_props(props: &ObjectMap) -> NSVisualEf
     }
 }
 
-pub(super) fn visual_effect_state_from_props(props: &ObjectMap) -> NSVisualEffectState {
+pub(super) fn visual_effect_state_from_props(props: &PropMap) -> NSVisualEffectState {
     let s = props_string(props, &["state", "visualEffectState", "visual_effect_state"])
         .unwrap_or_default();
     match s.to_ascii_lowercase().as_str() {
@@ -607,14 +585,11 @@ pub(super) fn visual_effect_state_from_props(props: &ObjectMap) -> NSVisualEffec
 }
 
 /// `VisualEffect` / `visual_effect`: material, blending, state, emphasis, layer `style`, and optional `appearance`.
-pub(super) fn apply_visual_effect_view_from_props(fx: &NSVisualEffectView, props: &ObjectMap) {
+pub(super) fn apply_visual_effect_view_from_props(fx: &NSVisualEffectView, props: &PropMap) {
     fx.setMaterial(visual_effect_material_from_props(props));
     fx.setBlendingMode(visual_effect_blending_from_props(props));
     fx.setState(visual_effect_state_from_props(props));
-    fx.setEmphasized(props_bool(
-        props,
-        &["emphasized", "isEmphasized", "is_emphasized"],
-    ));
+    fx.setEmphasized(props_bool(props, &["emphasized", "isEmphasized", "is_emphasized"], false));
     let fx_ns: &NSView = unsafe { &*std::ptr::from_ref(fx).cast::<NSView>() };
     apply_layer_style_to_view(fx_ns, props);
     super::apply_view_appearance_from_props(fx_ns, props);
@@ -634,7 +609,7 @@ pub(super) fn label_text_from_children(children: &[Value]) -> String {
     text_from_children(children).trim().to_string()
 }
 
-pub(super) fn options_strings(props: &ObjectMap) -> Vec<String> {
+pub(super) fn options_strings(props: &PropMap) -> Vec<String> {
     let Some(Value::Array(a)) = props.get("options") else {
         return vec![];
     };
@@ -701,7 +676,7 @@ const ZERO_EDGE_INSETS: NSEdgeInsets = NSEdgeInsets {
 
 /// Outer `scrollable` / `list` / `visual_effect` height: numeric from props, `"fill"`, or **omitted**
 /// → use the parent viewport when `avail_h` is `Some` (so a pane-filling `VisualEffect` is not stuck at 200).
-pub(super) fn scroll_outer_height(props: &ObjectMap, avail_h: Option<f64>) -> f64 {
+pub(super) fn scroll_outer_height(props: &PropMap, avail_h: Option<f64>) -> f64 {
     match props_string(props, &["height", "h"]).as_deref() {
         Some("fill") => avail_h.unwrap_or(200.0),
         Some(s) => s
@@ -731,7 +706,7 @@ pub(super) fn scroll_outer_height(props: &ObjectMap, avail_h: Option<f64>) -> f6
 /// Which `ZStack` child receives the pane’s bounded height (`height="fill"`). Default **`0`** (first
 /// child is the scroll / split surface). Use **`1`** when child **0** is a fixed-height underlay
 /// (e.g. `VisualEffect`) and child **1** should fill the stack.
-fn zstack_fill_child_index(props: &ObjectMap, n: usize) -> usize {
+fn zstack_fill_child_index(props: &PropMap, n: usize) -> usize {
     if n == 0 {
         return 0;
     }
@@ -758,7 +733,7 @@ fn zstack_fill_child_index(props: &ObjectMap, n: usize) -> usize {
     0
 }
 
-pub(super) fn visual_effect_intrinsic_outer_height(avail_h: Option<f64>, props: &ObjectMap) -> bool {
+pub(super) fn visual_effect_intrinsic_outer_height(avail_h: Option<f64>, props: &PropMap) -> bool {
     if avail_h.is_some() {
         return false;
     }
@@ -790,7 +765,7 @@ pub(super) fn visual_effect_intrinsic_outer_height(avail_h: Option<f64>, props: 
     }
 }
 
-pub(super) fn row_wants_click_overlay(props: &ObjectMap) -> bool {
+pub(super) fn row_wants_click_overlay(props: &PropMap) -> bool {
     props
         .get("onClick")
         .or_else(|| props.get("onclick"))
@@ -802,7 +777,7 @@ pub(super) fn row_wants_click_overlay(props: &ObjectMap) -> bool {
 /// `columnWidths={[22, null, 44]}` → fixed 22px and 44px columns; **`null`** (or `0` or `"flex"`) marks a
 /// flexible column that shares the remainder using the matching entry in **`weights`** (default `1` each).
 /// If fixed widths exceed `iw`, fixed columns are scaled down proportionally before flex gets the rest.
-pub(super) fn row_child_widths(iw: f64, n: usize, props: &ObjectMap) -> Vec<f64> {
+pub(super) fn row_child_widths(iw: f64, n: usize, props: &PropMap) -> Vec<f64> {
     if n == 0 {
         return vec![];
     }
@@ -897,7 +872,7 @@ pub(super) enum RowCrossAlign {
     End,
 }
 
-pub(super) fn row_cross_align(props: &ObjectMap) -> RowCrossAlign {
+pub(super) fn row_cross_align(props: &PropMap) -> RowCrossAlign {
     match props_string(
         props,
         &[
@@ -918,7 +893,7 @@ pub(super) fn row_cross_align(props: &ObjectMap) -> RowCrossAlign {
 }
 
 /// Outer height for a shell [`Row`]: at least `pt + content_h + pb`, or `height` / `h` when larger.
-pub(super) fn row_shell_outer_height(pt: f64, pb: f64, content_h: f64, props: &ObjectMap) -> f64 {
+pub(super) fn row_shell_outer_height(pt: f64, pb: f64, content_h: f64, props: &PropMap) -> f64 {
     let natural = pt + content_h + pb;
     let requested = props_f64(props, &["height", "h"], 0.0);
     if requested > 0.0 {
@@ -955,7 +930,7 @@ pub(super) fn row_shell_reposition_children(
     }
 }
 
-pub(super) fn button_bezel_from_props(props: &ObjectMap) -> NSBezelStyle {
+pub(super) fn button_bezel_from_props(props: &PropMap) -> NSBezelStyle {
     let s = props_string(props, &["bezelStyle", "bezel"])
         .unwrap_or_default()
         .to_ascii_lowercase();
@@ -976,11 +951,11 @@ pub(super) fn button_bezel_from_props(props: &ObjectMap) -> NSBezelStyle {
     }
 }
 
-pub(super) fn apply_button_chrome(btn: &NSButton, props: &ObjectMap) {
+pub(super) fn apply_button_chrome(btn: &NSButton, props: &PropMap) {
     btn.setBezelStyle(button_bezel_from_props(props));
     let icon = props_string(props, &["icon"]);
     let src = icon.or_else(|| {
-        if props_bool(props, &["symbol", "sfSymbol", "sf_symbol"]) {
+        if props_bool(props, &["symbol", "sfSymbol", "sf_symbol"], false) {
             props_string(props, &["src", "path", "url"])
         } else {
             None
@@ -1129,7 +1104,7 @@ pub(crate) fn apply_scroll_content_right_gutter(scroll: &NSScrollView, right: f6
     scroll.tile();
 }
 
-pub(crate) fn scroll_scroller_right_gutter_from_props(props: &ObjectMap) -> f64 {
+pub(crate) fn scroll_scroller_right_gutter_from_props(props: &PropMap) -> f64 {
     props_f64(
         props,
         &["scrollerGutterRight", "scroller_gutter_right"],
@@ -1222,11 +1197,11 @@ pub(super) fn resync_all_scroll_views_under(v: &NSView) {
     }
 }
 
-fn wire_on_click(props: &ObjectMap, btn: &NSButton, ctx: &BuildCtx) {
+fn wire_on_click(props: &PropMap, btn: &NSButton, ctx: &BuildCtx) {
     if let Some(Value::Function(f)) = props.get("onClick").or_else(|| props.get("onclick")) {
         let f = f.clone();
         let idx = register_click_handler(ctx.root_id, Rc::new(move || {
-            let _ = f(&[]);
+            let _ = f.call(&[]);
         })) as isize;
         btn.setTag(idx);
         unsafe {
@@ -1248,10 +1223,10 @@ pub fn commit_vnode(
 ) -> f64 {
     match v {
         Value::String(s) => {
-            let t = s.as_ref().trim();
+            let t = s.as_str().trim();
             let tf = NSTextField::labelWithString(&NSString::from_str(t), ctx.mtm);
-            apply_static_label_text_field(&tf, &ObjectMap::default(), ctx.mtm);
-            let h = single_line_label_height_after_style(&tf, &ObjectMap::default());
+            apply_static_label_text_field(&tf, &PropMap::default(), ctx.mtm);
+            let h = single_line_label_height_after_style(&tf, &PropMap::default());
             place(&tf, x, y_top, avail_w, h);
             freeze_autoresizing_for_manual_frames(&tf);
             parent.addSubview(&tf);
@@ -1262,7 +1237,7 @@ pub fn commit_vnode(
             let tag = map
                 .get("tag")
                 .and_then(|t| match t {
-                    Value::String(s) => Some(s.as_ref().to_string()),
+                    Value::String(s) => Some(s.as_str().to_string()),
                     _ => None,
                 })
                 .unwrap_or_default();
@@ -1472,10 +1447,7 @@ pub fn commit_vnode(
                     .max(0.0);
                     let dir = props_string(&props, &["direction", "orient"]).unwrap_or_default();
                     let scroll = NSScrollView::new(ctx.mtm);
-                    scroll.setDrawsBackground(props_bool(
-                        &props,
-                        &["drawsBackground", "draws_background"],
-                    ));
+                    scroll.setDrawsBackground(props_bool(&props, &["drawsBackground", "draws_background"], false));
                     scroll.setAutoresizingMask(
                         NSAutoresizingMaskOptions::ViewWidthSizable
                             | NSAutoresizingMaskOptions::ViewHeightSizable,
@@ -1571,7 +1543,7 @@ pub fn commit_vnode(
                 }
                 "text" => {
                     let text = label_text_from_children(&children);
-                    let wrap = props_bool(&props, &["wrap", "wrapping"]);
+                    let wrap = props_bool(&props, &["wrap", "wrapping"], false);
                     let tf = if wrap {
                         NSTextField::wrappingLabelWithString(&NSString::from_str(&text), ctx.mtm)
                     } else {
@@ -1602,7 +1574,7 @@ pub fn commit_vnode(
                         let idx = register_text_change_handler(
                             ctx.root_id,
                             Rc::new(move |s: String| {
-                                let _ = f(&[Value::String(s.into())]);
+                                let _ = f.call(&[Value::String(s.into())]);
                             }),
                         ) as isize;
                         tf.setTag(idx);
@@ -1630,7 +1602,7 @@ pub fn commit_vnode(
                         let idx = register_text_change_handler(
                             ctx.root_id,
                             Rc::new(move |s: String| {
-                                let _ = f(&[Value::String(s.into())]);
+                                let _ = f.call(&[Value::String(s.into())]);
                             }),
                         ) as isize;
                         tf.setTag(idx);
@@ -1650,7 +1622,7 @@ pub fn commit_vnode(
                     let btn = NSButton::new(ctx.mtm);
                     btn.setButtonType(NSButtonType::Switch);
                     btn.setTitle(&NSString::from_str(&label_text_from_children(&children)));
-                    let checked = props_bool(&props, &["checked", "value"]);
+                    let checked = props_bool(&props, &["checked", "value"], false);
                     btn.setState(if checked {
                         NSControlStateValueOn
                     } else {
@@ -1661,7 +1633,7 @@ pub fn commit_vnode(
                     {
                         let f = f.clone();
                         let idx = register_bool_handler(ctx.root_id, Rc::new(move |b| {
-                            let _ = f(&[Value::Bool(b)]);
+                            let _ = f.call(&[Value::Bool(b)]);
                         })) as isize;
                         btn.setTag(idx);
                         unsafe {
@@ -1678,7 +1650,7 @@ pub fn commit_vnode(
                 }
                 "toggler" => {
                     let sw = NSSwitch::new(ctx.mtm);
-                    sw.setState(if props_bool(&props, &["checked", "value"]) {
+                    sw.setState(if props_bool(&props, &["checked", "value"], false) {
                         NSControlStateValueOn
                     } else {
                         NSControlStateValueOff
@@ -1688,7 +1660,7 @@ pub fn commit_vnode(
                     {
                         let f = f.clone();
                         let idx = register_bool_handler(ctx.root_id, Rc::new(move |b| {
-                            let _ = f(&[Value::Bool(b)]);
+                            let _ = f.call(&[Value::Bool(b)]);
                         })) as isize;
                         sw.setTag(idx);
                         unsafe {
@@ -1715,7 +1687,7 @@ pub fn commit_vnode(
                     {
                         let f = f.clone();
                         let idx = register_f64_handler(ctx.root_id, Rc::new(move |v| {
-                            let _ = f(&[Value::Number(v)]);
+                            let _ = f.call(&[Value::Number(v)]);
                         })) as isize;
                         sl.setTag(idx);
                         unsafe {
@@ -1731,7 +1703,7 @@ pub fn commit_vnode(
                     pt + h + pb
                 }
                 "progress_bar" => {
-                    let ind = props_bool(&props, &["indeterminate"]);
+                    let ind = props_bool(&props, &["indeterminate"], false);
                     let pi = NSProgressIndicator::new(ctx.mtm);
                     if ind {
                         pi.setStyle(NSProgressIndicatorStyle::Spinning);
@@ -1770,7 +1742,7 @@ pub fn commit_vnode(
                     {
                         let f = f.clone();
                         let idx = register_pick_handler(ctx.root_id, Rc::new(move |i| {
-                            let _ = f(&[Value::Number(i as f64)]);
+                            let _ = f.call(&[Value::Number(i as f64)]);
                         })) as isize;
                         popup.setTag(idx);
                         unsafe {
@@ -1802,7 +1774,7 @@ pub fn commit_vnode(
                             let ii = i as f64;
                             let idx = register_bool_handler(ctx.root_id, Rc::new(move |on| {
                                 if on {
-                                    let _ = f(&[Value::Number(ii)]);
+                                    let _ = f.call(&[Value::Number(ii)]);
                                 }
                             })) as isize;
                             btn.setTag(idx);
@@ -1823,7 +1795,7 @@ pub fn commit_vnode(
                 }
                 "image" => {
                     let src = props_string(&props, &["src", "path", "url"]).unwrap_or_default();
-                    let use_symbol = props_bool(&props, &["symbol", "sfSymbol", "sf_symbol"]);
+                    let use_symbol = props_bool(&props, &["symbol", "sfSymbol", "sf_symbol"], false);
                     let img = if use_symbol {
                         let sym = NSString::from_str(&src);
                         NSImage::imageWithSystemSymbolName_accessibilityDescription(&sym, None)
@@ -1902,10 +1874,7 @@ pub fn commit_vnode(
                     };
                     let body = rows.join("\n");
                     let scroll = NSScrollView::new(ctx.mtm);
-                    scroll.setDrawsBackground(props_bool(
-                        &props,
-                        &["drawsBackground", "draws_background"],
-                    ));
+                    scroll.setDrawsBackground(props_bool(&props, &["drawsBackground", "draws_background"], false));
                     scroll.setHasVerticalScroller(true);
                     tune_scroll_view_chrome(&scroll, true, false);
                     strip_scroll_content_insets(&scroll);
@@ -1928,10 +1897,7 @@ pub fn commit_vnode(
                     let min_h = props_f64(&props, &["minHeight", "min_height"], 120.0);
                     let th = base_h.max(min_h);
                     let scroll = NSScrollView::new(ctx.mtm);
-                    scroll.setDrawsBackground(props_bool(
-                        &props,
-                        &["drawsBackground", "draws_background"],
-                    ));
+                    scroll.setDrawsBackground(props_bool(&props, &["drawsBackground", "draws_background"], false));
                     scroll.setHasVerticalScroller(true);
                     tune_scroll_view_chrome(&scroll, true, false);
                     strip_scroll_content_insets(&scroll);
@@ -1967,7 +1933,7 @@ pub fn commit_vnode(
                         let idx = register_text_change_handler(
                             ctx.root_id,
                             Rc::new(move |s: String| {
-                                let _ = f(&[Value::String(s.into())]);
+                                let _ = f.call(&[Value::String(s.into())]);
                             }),
                         ) as isize;
                         install_text_change_tag_on_text_view(&tv, idx);
@@ -1993,10 +1959,7 @@ pub fn commit_vnode(
                     let min_h = props_f64(&props, &["minHeight", "min_height"], 120.0);
                     let th = base_h.max(min_h);
                     let scroll = NSScrollView::new(ctx.mtm);
-                    scroll.setDrawsBackground(props_bool(
-                        &props,
-                        &["drawsBackground", "draws_background"],
-                    ));
+                    scroll.setDrawsBackground(props_bool(&props, &["drawsBackground", "draws_background"], false));
                     scroll.setHasVerticalScroller(true);
                     tune_scroll_view_chrome(&scroll, true, false);
                     strip_scroll_content_insets(&scroll);
@@ -2034,15 +1997,15 @@ pub fn commit_vnode(
                                 let is_tab = matches!(
                                     m.get("tag"),
                                     Some(Value::String(s)) if {
-                                        let t = s.as_ref();
+                                        let t = s.as_str();
                                         t == "tab" || t == "Tab"
                                     }
                                 );
-                                let p = vnode_props(&m);
+                                let p = vnode_props(m);
                                 let lbl = props_string(&p, &["label", "title", "name"])
                                     .unwrap_or_else(|| "Tab".into());
                                 let ch = if is_tab {
-                                    vnode_children(&m)
+                                    vnode_children(m)
                                 } else {
                                     vec![c.clone()]
                                 };
@@ -2176,7 +2139,7 @@ pub fn commit_vnode(
                     pt + th + pb
                 }
                 "macos_window" => {
-                    let wrap = Value::object(map.clone());
+                    let wrap = Value::object(propmap_to_object_map(&map));
                     if let Some(inner) = macos_window_content(&wrap) {
                         commit_vnode(&inner, parent, ix, iy, iw, avail_h, ctx)
                     } else {
@@ -2226,8 +2189,8 @@ pub fn commit_vnode(
         }
         _ => {
             let tf = NSTextField::labelWithString(&NSString::from_str(&v.to_display_string()), ctx.mtm);
-            apply_static_label_text_field(&tf, &ObjectMap::default(), ctx.mtm);
-            let h = single_line_label_height_after_style(&tf, &ObjectMap::default());
+            apply_static_label_text_field(&tf, &PropMap::default(), ctx.mtm);
+            let h = single_line_label_height_after_style(&tf, &PropMap::default());
             place(&tf, x, y_top, avail_w, h);
             freeze_autoresizing_for_manual_frames(&tf);
             parent.addSubview(&tf);
@@ -2385,7 +2348,15 @@ mod sidebar_window_children_tests {
     use std::rc::Rc;
     use std::sync::Arc;
 
-    use tishlang_core::{ObjectMap, Value};
+    pub(super) use tish_apple_common::style::{props_bool, props_f64, props_string};
+use tishlang_core::{ObjectMap, PropMap, Value};
+
+fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
+    pm.iter()
+        .map(|(k, v)| (std::sync::Arc::clone(k), v.clone()))
+        .collect()
+}
+
 
     use super::sidebar_window_children;
 
@@ -2431,7 +2402,15 @@ mod split_pane_vnodes_tests {
     use std::rc::Rc;
     use std::sync::Arc;
 
-    use tishlang_core::{ObjectMap, Value};
+    pub(super) use tish_apple_common::style::{props_bool, props_f64, props_string};
+use tishlang_core::{ObjectMap, PropMap, Value};
+
+fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
+    pm.iter()
+        .map(|(k, v)| (std::sync::Arc::clone(k), v.clone()))
+        .collect()
+}
+
 
     use super::split_pane_vnodes;
 
@@ -2478,7 +2457,15 @@ mod effective_props_tests {
     use std::rc::Rc;
     use std::sync::Arc;
 
-    use tishlang_core::{ObjectMap, Value};
+    pub(super) use tish_apple_common::style::{props_bool, props_f64, props_string};
+use tishlang_core::{ObjectMap, PropMap, Value};
+
+fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
+    pm.iter()
+        .map(|(k, v)| (std::sync::Arc::clone(k), v.clone()))
+        .collect()
+}
+
 
     use super::effective_props;
 
@@ -2515,11 +2502,11 @@ mod effective_props_tests {
         );
         let e = effective_props(&raw);
         match e.get("height") {
-            Some(Value::String(s)) => assert_eq!(s.as_ref(), "fill"),
+            Some(Value::String(s)) => assert_eq!(s.as_str(), "fill"),
             o => panic!("expected height fill, got {:?}", o),
         }
         match e.get("backgroundColor") {
-            Some(Value::String(s)) => assert_eq!(s.as_ref(), "#ff0000"),
+            Some(Value::String(s)) => assert_eq!(s.as_str(), "#ff0000"),
             o => panic!("expected backgroundColor, got {:?}", o),
         }
     }

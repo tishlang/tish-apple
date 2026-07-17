@@ -1,8 +1,8 @@
 //! React-style prop helpers shared by AppKit and UIKit hosts.
 
-use tishlang_core::{ObjectMap, Value};
+use tishlang_core::{PropMap, Value};
 
-pub fn props_string(props: &ObjectMap, keys: &[&str]) -> Option<String> {
+pub fn props_string(props: &PropMap, keys: &[&str]) -> Option<String> {
     for k in keys {
         if let Some(Value::String(s)) = props.get(*k) {
             return Some(s.to_string());
@@ -11,7 +11,7 @@ pub fn props_string(props: &ObjectMap, keys: &[&str]) -> Option<String> {
     None
 }
 
-pub fn props_f64(props: &ObjectMap, keys: &[&str], default: f64) -> f64 {
+pub fn props_f64(props: &PropMap, keys: &[&str], default: f64) -> f64 {
     for k in keys {
         if let Some(n) = props.get(*k).and_then(|v| v.as_number()) {
             return n;
@@ -20,7 +20,7 @@ pub fn props_f64(props: &ObjectMap, keys: &[&str], default: f64) -> f64 {
     default
 }
 
-pub fn props_bool(props: &ObjectMap, keys: &[&str], default: bool) -> bool {
+pub fn props_bool(props: &PropMap, keys: &[&str], default: bool) -> bool {
     for k in keys {
         if let Some(v) = props.get(*k) {
             return match v {

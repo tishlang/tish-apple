@@ -10,8 +10,8 @@ use objc2_foundation::{NSObject, NSObjectProtocol};
 use tishlang_ui::runtime::run_with_current_root;
 
 use super::handlers::{
-    decode_control_tag, decode_toolbar_tag, invoke_toolbar_action, BOOL_HANDLERS, CLICK_HANDLERS,
-    F64_HANDLERS, PICK_HANDLERS,
+    decode_control_tag, decode_toolbar_tag, invoke_click_handler, invoke_toolbar_action,
+    BOOL_HANDLERS, F64_HANDLERS, PICK_HANDLERS,
 };
 
 define_class!(
@@ -29,19 +29,14 @@ define_class!(
             let Some(btn) = s.downcast_ref::<NSButton>() else {
                 return;
             };
-            if decode_toolbar_tag(btn.tag()).is_some() {
+            let tag = btn.tag();
+            if decode_toolbar_tag(tag).is_some() {
                 return;
             }
-            let (root_id, idx) = decode_control_tag(btn.tag());
-            let handler = CLICK_HANDLERS.with(|c| {
-                c.borrow()
-                    .get(&root_id)
-                    .and_then(|v| v.get(idx))
-                    .and_then(|slot| slot.as_ref().map(|h| h.clone()))
+            let (root_id, _) = decode_control_tag(tag);
+            run_with_current_root(root_id, || {
+                invoke_click_handler(tag);
             });
-            if let Some(f) = handler {
-                run_with_current_root(root_id, || f());
-            }
         }
 
         #[unsafe(method(tishBool:))]

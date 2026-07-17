@@ -7,7 +7,7 @@ use objc2::MainThreadMarker;
 use objc2_app_kit::{NSScreen, NSView, NSWindow};
 use objc2_core_foundation::CGSize;
 use objc2_foundation::NSString;
-use tishlang_core::{ObjectMap, Value};
+use tishlang_core::{ObjectMap, PropMap, Value};
 use tishlang_ui::runtime::{current_root_id, LEGACY_ROOT_ID, RootId};
 
 use super::handlers::{

@@ -14,7 +14,7 @@ use objc2_ui_kit::{
 use tish_apple_common::handlers::register_click_handler;
 use tish_apple_common::style::props_f64;
 use tish_apple_common::tag::canonical_host_tag;
-use tishlang_core::{ObjectMap, Value};
+use tishlang_core::{ObjectMap, PropMap, Value};
 use tishlang_ui::runtime::{is_fragment_tag, RootId};
 
 use super::router::IosControlRouter;
@@ -34,14 +34,14 @@ pub fn clear_subviews(view: &UIView) {
     }
 }
 
-fn vnode_children(obj: &ObjectMap) -> Vec<Value> {
+fn vnode_children(obj: &PropMap) -> Vec<Value> {
     match obj.get("children") {
         Some(Value::Array(a)) => a.borrow().clone(),
         _ => vec![],
     }
 }
 
-fn vnode_props(obj: &ObjectMap) -> ObjectMap {
+fn vnode_props(obj: &PropMap) -> PropMap {
     match obj.get("props") {
         Some(Value::Object(o)) => o.borrow().strings.clone(),
         _ => ObjectMap::default(),
@@ -187,7 +187,7 @@ fn ui_image_from_rgba(w: usize, h: usize, rgba: &[u8]) -> Option<Retained<UIImag
     Some(UIImage::imageWithCGImage(&cg))
 }
 
-fn wire_on_click(props: &ObjectMap, btn: &UIButton, ctx: &BuildCtx) {
+fn wire_on_click(props: &PropMap, btn: &UIButton, ctx: &BuildCtx) {
     if let Some(Value::Function(f)) = props.get("onClick").or_else(|| props.get("onclick")) {
         let f = f.clone();
         let idx = register_click_handler(ctx.root_id, Rc::new(move || {
@@ -379,7 +379,7 @@ fn layout_vnode(
     }
 }
 
-fn padding_insets(props: &ObjectMap) -> (f64, f64, f64, f64) {
+fn padding_insets(props: &PropMap) -> (f64, f64, f64, f64) {
     let pt = props_f64(props, &["paddingTop", "padding_top", "pt"], 0.0);
     let pr = props_f64(props, &["paddingRight", "padding_right", "pr"], 0.0);
     let pb = props_f64(props, &["paddingBottom", "padding_bottom", "pb"], 0.0);

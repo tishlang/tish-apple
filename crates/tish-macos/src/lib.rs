@@ -66,7 +66,7 @@ pub use appkit::macos_object;
 #[cfg(not(target_os = "macos"))]
 use std::sync::Arc;
 #[cfg(not(target_os = "macos"))]
-use tishlang_core::{ObjectMap, Value};
+use tishlang_core::{ObjectMap, PropMap, Value};
 
 /// Non-macOS stub: `macos.run` logs; `window.*`, `useState`, and `useMemo` resolve for CI `cargo check`.
 #[cfg(not(target_os = "macos"))]

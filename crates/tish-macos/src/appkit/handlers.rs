@@ -17,8 +17,6 @@ use tishlang_ui::runtime::{RootId, LEGACY_ROOT_ID};
 const TOOLBAR_TAG_LOW_MARKER: u64 = 1 << 31;
 
 thread_local! {
-    pub static CLICK_HANDLERS: RefCell<HashMap<RootId, Vec<Option<Rc<dyn Fn()>>>>> =
-        RefCell::new(HashMap::new());
     pub static TEXT_CHANGE_HANDLERS: RefCell<HashMap<RootId, Vec<Option<Rc<dyn Fn(String)>>>>> =
         RefCell::new(HashMap::new());
     pub static BOOL_HANDLERS: RefCell<HashMap<RootId, Vec<Option<Rc<dyn Fn(bool)>>>>> =
@@ -41,24 +39,10 @@ thread_local! {
         RefCell::new(HashMap::new());
 }
 
-/// Pack `(root_id, slot)` into an `NSControl.tag` (64-bit). Low 32 bits: index; high: root id.
-/// Tags with high zero decode as [`LEGACY_ROOT_ID`] for older binaries that used a flat table.
-#[inline]
-pub fn encode_control_tag(root_id: RootId, idx: usize) -> isize {
-    (((root_id as u64) << 32) | (idx as u64 & 0xFFFF_FFFF)) as i64 as isize
-}
-
-#[inline]
-pub fn decode_control_tag(tag: isize) -> (RootId, usize) {
-    let t = tag as u64;
-    let hi = (t >> 32) as RootId;
-    let lo = (t & 0xFFFF_FFFF) as usize;
-    if hi == 0 {
-        (LEGACY_ROOT_ID, lo)
-    } else {
-        (hi, lo)
-    }
-}
+pub use tish_apple_common::handlers::{
+    clear_click_handlers_for_root, decode_control_tag, encode_control_tag, invoke_click_handler,
+    register_click_handler, update_click_handler,
+};
 
 /// `NSTextView` is not an `NSControl`; `setTag:` is not supported on text views on current AppKit.
 /// Store the packed handler id in `NSUserInterfaceItemIdentification` instead.
@@ -226,9 +210,7 @@ pub fn set_detail_metrics_for_root(root_id: RootId, ptr: usize) {
 
 pub fn clear_handlers_for_root(root_id: RootId) {
     clear_toolbar_handlers(root_id);
-    CLICK_HANDLERS.with(|c| {
-        c.borrow_mut().remove(&root_id);
-    });
+    clear_click_handlers_for_root(root_id);
     TEXT_CHANGE_HANDLERS.with(|c| {
         c.borrow_mut().remove(&root_id);
     });
@@ -243,15 +225,6 @@ pub fn clear_handlers_for_root(root_id: RootId) {
     });
 }
 
-pub fn register_click_handler(root_id: RootId, f: Rc<dyn Fn()>) -> isize {
-    CLICK_HANDLERS.with(|c| {
-        let mut m = c.borrow_mut();
-        let v = m.entry(root_id).or_default();
-        let i = v.len();
-        v.push(Some(f));
-        encode_control_tag(root_id, i)
-    })
-}
 
 pub fn register_text_change_handler(root_id: RootId, f: Rc<dyn Fn(String)>) -> isize {
     TEXT_CHANGE_HANDLERS.with(|c| {
@@ -313,15 +286,6 @@ pub fn update_text_change_handler(
     encode_control_tag(root_id, idx)
 }
 
-pub fn update_click_handler(root_id: RootId, idx: usize, f: Rc<dyn Fn()>) -> isize {
-    CLICK_HANDLERS.with(|c| {
-        let mut m = c.borrow_mut();
-        let v = m.entry(root_id).or_default();
-        ensure_vec_len(v, idx);
-        v[idx] = Some(f);
-    });
-    encode_control_tag(root_id, idx)
-}
 
 pub fn update_bool_handler(root_id: RootId, idx: usize, f: Rc<dyn Fn(bool)>) -> isize {
     BOOL_HANDLERS.with(|c| {

@@ -82,7 +82,7 @@ unsafe extern "C-unwind" fn distributed_callback(
         // `onSessionMessage`, which must `borrow_mut` the same RefCell.
         let to_run = MESSAGE_HANDLER.with(|h| h.borrow().clone());
         if let Some(f) = to_run {
-            let _ = f(&[
+            let _ = f.call(&[
                 Value::String(channel.into()),
                 Value::String(body.into()),
             ]);

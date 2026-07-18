@@ -15,7 +15,7 @@ use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, ProtocolObject};
 use objc2::{define_class, msg_send, DefinedClass, MainThreadMarker, MainThreadOnly};
-use objc2_foundation::{NSObject, NSObjectProtocol, NSString};
+use objc2_foundation::{NSObject, NSObjectProtocol, NSString, NSURL, NSURLRequest};
 use objc2_web_kit::{
     WKScriptMessage, WKScriptMessageHandler, WKUserContentController, WKUserScript,
     WKUserScriptInjectionTime, WKWebView, WKWebViewConfiguration,
@@ -255,6 +255,7 @@ pub fn create_webview(
     let on_invoke = prop_invoke_handler(props);
     let on_emit = prop_emit_handler(props);
 
+    let sid = surface_id.clone();
     BRIDGES.with(|m| {
         m.borrow_mut().insert(
             surface_id,
@@ -266,6 +267,7 @@ pub fn create_webview(
             },
         );
     });
+    register_surface(&sid);
 
     wv
 }
@@ -295,9 +297,153 @@ pub fn detach_bridge(webview: &WKWebView) {
                 unsafe {
                     ucc.removeScriptMessageHandlerForName(&name);
                 }
+                unregister_surface(&k);
             }
         }
     });
+}
+
+fn register_surface(surface_id: &str) {
+    tish_broker::GLOBAL_SURFACES.register(tish_broker::SurfaceInfo {
+        id: surface_id.to_string(),
+        kind: tish_broker::SurfaceKind::Webview,
+        platform: Some("macos".into()),
+        label: Some(surface_id.to_string()),
+    });
+}
+
+fn unregister_surface(surface_id: &str) {
+    let _ = tish_broker::GLOBAL_SURFACES.unregister(surface_id);
+}
+
+pub fn list_ids() -> Vec<String> {
+    BRIDGES.with(|m| m.borrow().keys().cloned().collect())
+}
+
+pub fn load_content(
+    surface_id: &str,
+    url: Option<&str>,
+    html: Option<&str>,
+) -> Result<(), String> {
+    let wv = BRIDGES.with(|m| m.borrow().get(surface_id).map(|e| e.webview.clone()));
+    let Some(wv) = wv else {
+        return Err(format!("no bridged webview for surfaceId={surface_id}"));
+    };
+    if let Some(doc) = html.filter(|s| !s.is_empty()) {
+        let html_ns = NSString::from_str(doc);
+        unsafe {
+            let _: () = msg_send![&*wv, loadHTMLString: &*html_ns, baseURL: None::<&NSURL>];
+        }
+        return Ok(());
+    }
+    let Some(src) = url.filter(|s| !s.is_empty()) else {
+        return Err("webview.load requires url or html".into());
+    };
+    const PREFIX: &str = "data:text/html,";
+    if let Some(rest) = src.strip_prefix(PREFIX) {
+        let html_ns = NSString::from_str(rest);
+        unsafe {
+            let _: () = msg_send![&*wv, loadHTMLString: &*html_ns, baseURL: None::<&NSURL>];
+        }
+        return Ok(());
+    }
+    let Some(nsurl) = NSURL::URLWithString(&NSString::from_str(src)) else {
+        return Err(format!("invalid url: {src}"));
+    };
+    let req = NSURLRequest::requestWithURL(&nsurl);
+    unsafe {
+        let _ = WKWebView::loadRequest(&*wv, &req);
+    }
+    Ok(())
+}
+
+pub fn post_event_json(
+    surface_id: &str,
+    event: &str,
+    payload: &serde_json::Value,
+) -> Result<(), String> {
+    let event_js = serde_json::to_string(event).unwrap_or_else(|_| "\"\"".into());
+    let payload_js = serde_json::to_string(payload).unwrap_or_else(|_| "null".into());
+    let js = format!(
+        "window.__TISH_APP__&&window.__TISH_APP__.__dispatch({event_js},{payload_js});"
+    );
+    evaluate_js(surface_id, &js)
+}
+
+/// Broker `webview.*` over host WK panes (desktop `local_invoke` / Tauri fallback).
+pub fn broker_try_invoke(
+    cmd: &str,
+    args: &serde_json::Value,
+) -> Option<Result<serde_json::Value, String>> {
+    use serde_json::{json, Value as Json};
+    match cmd {
+        "webview.list" => {
+            let labels = list_ids();
+            Some(Ok(json!({ "ok": true, "labels": labels, "surfaceIds": labels })))
+        }
+        "webview.eval" => {
+            let sid = match surface_id_arg(args) {
+                Ok(s) => s,
+                Err(e) => return Some(Err(e)),
+            };
+            let js = match args
+                .get("js")
+                .or_else(|| args.get("script"))
+                .and_then(|v| v.as_str())
+            {
+                Some(s) => s,
+                None => return Some(Err("js required".into())),
+            };
+            Some(evaluate_js(&sid, js).map(|_| json!({ "ok": true, "surfaceId": sid })))
+        }
+        "webview.postMessage" => {
+            let sid = match surface_id_arg(args) {
+                Ok(s) => s,
+                Err(e) => return Some(Err(e)),
+            };
+            let channel = args
+                .get("channel")
+                .or_else(|| args.get("event"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("message");
+            let body = args
+                .get("body")
+                .or_else(|| args.get("payload"))
+                .cloned()
+                .unwrap_or(Json::Null);
+            Some(
+                post_event_json(&sid, channel, &body)
+                    .map(|_| json!({ "ok": true, "surfaceId": sid, "channel": channel })),
+            )
+        }
+        "webview.load" => {
+            let sid = match surface_id_arg(args) {
+                Ok(s) => s,
+                Err(e) => return Some(Err(e)),
+            };
+            let url = args.get("url").and_then(|v| v.as_str());
+            let html = args.get("html").and_then(|v| v.as_str());
+            Some(load_content(&sid, url, html).map(|_| {
+                json!({
+                    "ok": true,
+                    "surfaceId": sid,
+                    "url": url,
+                    "html": html.is_some(),
+                })
+            }))
+        }
+        _ if cmd.starts_with("webview.") => Some(Ok(tish_broker::unsupported("webview"))),
+        _ => None,
+    }
+}
+
+fn surface_id_arg(args: &serde_json::Value) -> Result<String, String> {
+    args.get("surfaceId")
+        .or_else(|| args.get("label"))
+        .or_else(|| args.get("id"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| "surfaceId required".into())
 }
 
 pub fn evaluate_js(surface_id: &str, js: &str) -> Result<(), String> {
@@ -445,14 +591,23 @@ fn value_to_json_string(v: &Value) -> String {
         }
         Value::String(s) => serde_json::to_string(s.as_str()).unwrap_or_else(|_| "\"\"".into()),
         Value::Array(a) => {
-            let parts: Vec<String> = a.borrow().iter().map(value_to_json_string).collect();
+            // Clone first — send-values VmRef Mutex is non-reentrant; holding borrow
+            // while recursing into nested values self-deadlocks (UI freeze at 0% CPU).
+            let items: Vec<Value> = a.borrow().clone();
+            let parts: Vec<String> = items.iter().map(value_to_json_string).collect();
             format!("[{}]", parts.join(","))
         }
         Value::Object(o) => {
+            let entries: Vec<(String, Value)> = o
+                .borrow()
+                .strings
+                .iter()
+                .map(|(k, val)| (k.to_string(), val.clone()))
+                .collect();
             let mut parts = Vec::new();
-            for (k, val) in o.borrow().strings.iter() {
-                let key = serde_json::to_string(&**k).unwrap_or_else(|_| "\"\"".into());
-                parts.push(format!("{key}:{}", value_to_json_string(val)));
+            for (k, val) in entries {
+                let key = serde_json::to_string(&k).unwrap_or_else(|_| "\"\"".into());
+                parts.push(format!("{key}:{}", value_to_json_string(&val)));
             }
             format!("{{{}}}", parts.join(","))
         }

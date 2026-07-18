@@ -7,12 +7,15 @@ use objc2::runtime::AnyObject;
 use objc2::{sel, ClassType};
 use objc2_core_foundation::CGSize;
 use objc2_foundation::{NSObjectProtocol, NSString};
+use objc2::runtime::ProtocolObject;
 use objc2_ui_kit::{
-    UIButton, UIControlState, UILabel, UIScrollView, UISwitch, UITextField, UIView,
+    UIButton, UIControlEvents, UIControlState, UILabel, UIScrollView, UISegmentedControl,
+    UISlider, UISwitch, UITextField, UITextView, UIView,
 };
 use tish_apple_common::handlers::{
-    decode_control_tag, register_bool_handler, register_click_handler, register_text_change_handler,
-    update_bool_handler, update_click_handler, update_text_change_handler,
+    decode_control_tag, register_bool_handler, register_click_handler, register_f64_handler,
+    register_text_change_handler, update_bool_handler, update_click_handler, update_f64_handler,
+    update_text_change_handler,
 };
 use tish_apple_common::style::{props_bool, props_f64, props_string};
 use tish_apple_common::tag::canonical_host_tag;
@@ -179,12 +182,109 @@ fn wire_bool_change_patch(props: &PropMap, sw: &UISwitch, ctx: &BuildCtx) {
                 sw.addTarget_action_forControlEvents(
                     Some(&*p),
                     sel!(jsxBoolChanged:),
-                    objc2_ui_kit::UIControlEvents::ValueChanged,
+                    UIControlEvents::ValueChanged,
                 );
             }
             idx
         };
         sw.setTag(idx);
+    }
+}
+
+fn wire_slider_change_patch(props: &PropMap, sl: &UISlider, ctx: &BuildCtx) {
+    if let Some(Value::Function(f)) = props.get("onChange").or_else(|| props.get("onInput")) {
+        let f = f.clone();
+        let existing = sl.tag();
+        let idx = if has_control_tag(existing) {
+            let (rid, slot) = decode_control_tag(existing);
+            update_f64_handler(
+                rid,
+                slot,
+                Rc::new(move |v| {
+                    let _ = f.call(&[Value::Number(v)]);
+                }),
+            )
+        } else {
+            let idx = register_f64_handler(
+                ctx.root_id,
+                Rc::new(move |v| {
+                    let _ = f.call(&[Value::Number(v)]);
+                }),
+            );
+            unsafe {
+                let p = Retained::as_ptr(&ctx.router).cast::<AnyObject>();
+                sl.addTarget_action_forControlEvents(
+                    Some(&*p),
+                    sel!(jsxSliderChanged:),
+                    UIControlEvents::ValueChanged,
+                );
+            }
+            idx
+        };
+        sl.setTag(idx);
+    }
+}
+
+fn wire_segment_change_patch(props: &PropMap, seg: &UISegmentedControl, ctx: &BuildCtx) {
+    if let Some(Value::Function(f)) = props.get("onChange").or_else(|| props.get("onSelect")) {
+        let f = f.clone();
+        let existing = seg.tag();
+        let idx = if has_control_tag(existing) {
+            let (rid, slot) = decode_control_tag(existing);
+            update_f64_handler(
+                rid,
+                slot,
+                Rc::new(move |v| {
+                    let _ = f.call(&[Value::Number(v)]);
+                }),
+            )
+        } else {
+            let idx = register_f64_handler(
+                ctx.root_id,
+                Rc::new(move |v| {
+                    let _ = f.call(&[Value::Number(v)]);
+                }),
+            );
+            unsafe {
+                let p = Retained::as_ptr(&ctx.router).cast::<AnyObject>();
+                seg.addTarget_action_forControlEvents(
+                    Some(&*p),
+                    sel!(jsxSegmentChanged:),
+                    UIControlEvents::ValueChanged,
+                );
+            }
+            idx
+        };
+        seg.setTag(idx);
+    }
+}
+
+fn wire_text_view_change_patch(props: &PropMap, tv: &UITextView, ctx: &BuildCtx) {
+    if let Some(Value::Function(f)) = props.get("onChange").or_else(|| props.get("onInput")) {
+        let f = f.clone();
+        let existing = tv.tag();
+        let idx = if has_control_tag(existing) {
+            let (rid, slot) = decode_control_tag(existing);
+            update_text_change_handler(
+                rid,
+                slot,
+                Rc::new(move |s: String| {
+                    let _ = f.call(&[Value::String(s.into())]);
+                }),
+            )
+        } else {
+            let idx = register_text_change_handler(
+                ctx.root_id,
+                Rc::new(move |s: String| {
+                    let _ = f.call(&[Value::String(s.into())]);
+                }),
+            );
+            unsafe {
+                tv.setDelegate(Some(ProtocolObject::from_ref(&*ctx.text_view_delegate)));
+            }
+            idx
+        };
+        tv.setTag(idx);
     }
 }
 
@@ -353,13 +453,18 @@ fn patch_vnode(
                         return Err(());
                     }
                     let n = old_elems.len().max(1);
-                    let cw = iw / n as f64;
+                    let gap = props_f64(&props, &["gap", "columnGap", "column_gap"], 0.0);
+                    let total_gap = gap * (n.saturating_sub(1) as f64);
+                    let cw = ((iw - total_gap) / n as f64).max(0.0);
                     let mut cx = ix;
                     let mut max_h = 0.0_f64;
-                    for (co, cn) in old_elems.iter().zip(new_elems.iter()) {
+                    for (i, (co, cn)) in old_elems.iter().zip(new_elems.iter()).enumerate() {
                         let h = patch_vnode(co, cn, parent, slot, cx, iy, cw, None, ctx)?;
                         max_h = max_h.max(h);
                         cx += cw;
+                        if i + 1 < old_elems.len() {
+                            cx += gap;
+                        }
                     }
                     Ok(pt + max_h.max(44.0) + pb)
                 }
@@ -443,6 +548,144 @@ fn patch_vnode(
                     freeze_autoresizing(sw);
                     *slot += 1;
                     Ok(pt + h + pb)
+                }
+                "slider" => {
+                    let v = subview(parent, *slot).ok_or(())?;
+                    if !v.isKindOfClass(UISlider::class()) {
+                        return Err(());
+                    }
+                    let sl: &UISlider = unsafe { &*(std::ptr::from_ref(&*v).cast()) };
+                    let minv = props_f64(&props, &["min"], 0.0) as f32;
+                    let maxv = props_f64(&props, &["max"], 100.0) as f32;
+                    sl.setMinimumValue(minv);
+                    sl.setMaximumValue(maxv);
+                    let want = props_f64(&props, &["value"], minv as f64) as f32;
+                    if (sl.value() - want).abs() > 0.000_1 {
+                        sl.setValue(want);
+                    }
+                    wire_slider_change_patch(&props, sl, ctx);
+                    let h = props_f64(&props, &["height", "h"], 44.0);
+                    place(sl, ix, iy, iw, h);
+                    freeze_autoresizing(sl);
+                    *slot += 1;
+                    Ok(pt + h + pb)
+                }
+                "text_editor" => {
+                    let v = subview(parent, *slot).ok_or(())?;
+                    if !v.isKindOfClass(UITextView::class()) {
+                        return Err(());
+                    }
+                    let tv: &UITextView = unsafe { &*(std::ptr::from_ref(&*v).cast()) };
+                    let want = props_string(&props, &["value", "defaultValue"]).unwrap_or_default();
+                    let cur = tv.text().to_string();
+                    let focused = tv.isFirstResponder();
+                    if cur != want && !focused {
+                        tv.setText(Some(&NSString::from_str(&want)));
+                    }
+                    wire_text_view_change_patch(&props, tv, ctx);
+                    let base_h = scroll_outer_height(&props, avail_h);
+                    let min_h = props_f64(&props, &["minHeight", "min_height"], 120.0);
+                    let th = base_h.max(min_h);
+                    place(tv, ix, iy, iw, th);
+                    freeze_autoresizing(tv);
+                    *slot += 1;
+                    Ok(pt + th + pb)
+                }
+                "tabs" => {
+                    let v = subview(parent, *slot).ok_or(())?;
+                    let th = props_f64(&props, &["height", "h"], avail_h.unwrap_or(200.0));
+                    place(&*v, ix, iy, iw, th);
+                    freeze_autoresizing(&*v);
+                    let outer_subs = v.subviews();
+                    if outer_subs.count() < 2 {
+                        return Err(());
+                    }
+                    let seg_v = outer_subs.objectAtIndex(0);
+                    if !seg_v.isKindOfClass(UISegmentedControl::class()) {
+                        return Err(());
+                    }
+                    let seg: &UISegmentedControl =
+                        unsafe { &*(std::ptr::from_ref(&*seg_v).cast()) };
+                    let selected = props_f64(&props, &["selected", "value"], 0.0) as isize;
+                    let content = outer_subs.objectAtIndex(1);
+                    let panes = content.subviews();
+                    let n = panes.count() as isize;
+                    let selected = selected.max(0).min((n - 1).max(0));
+                    if n > 0 && seg.selectedSegmentIndex() != selected {
+                        seg.setSelectedSegmentIndex(selected);
+                    }
+                    for i in 0..panes.count() {
+                        let pane = panes.objectAtIndex(i);
+                        pane.setHidden((i as isize) != selected);
+                    }
+                    wire_segment_change_patch(&props, seg, ctx);
+                    // Patch children inside each pane when tab bodies match 1:1.
+                    let mut old_tabs = Vec::new();
+                    let mut new_tabs = Vec::new();
+                    collect_element_vnodes(&vnode_children(om), &mut old_tabs);
+                    collect_element_vnodes(&children, &mut new_tabs);
+                    if old_tabs.len() != new_tabs.len() || old_tabs.len() as isize != n {
+                        return Err(());
+                    }
+                    let seg_h = 32.0_f64;
+                    let gap = 8.0_f64;
+                    let pane_h = (th - seg_h - gap).max(40.0);
+                    for i in 0..old_tabs.len() {
+                        let pane = panes.objectAtIndex(i);
+                        let mut pane_slot = 0usize;
+                        let mut old_body = Vec::new();
+                        let mut new_body = Vec::new();
+                        // Prefer <tab> children; otherwise treat child as body.
+                        let om_tab = match &old_tabs[i] {
+                            Value::Object(o) => o.borrow().strings.clone(),
+                            _ => return Err(()),
+                        };
+                        let nm_tab = match &new_tabs[i] {
+                            Value::Object(o) => o.borrow().strings.clone(),
+                            _ => return Err(()),
+                        };
+                        let old_is_tab = matches!(
+                            om_tab.get("tag"),
+                            Some(Value::String(s)) if s.as_str() == "tab" || s.as_str() == "Tab"
+                        );
+                        let new_is_tab = matches!(
+                            nm_tab.get("tag"),
+                            Some(Value::String(s)) if s.as_str() == "tab" || s.as_str() == "Tab"
+                        );
+                        if old_is_tab {
+                            collect_element_vnodes(&vnode_children(&om_tab), &mut old_body);
+                        } else {
+                            old_body.push(old_tabs[i].clone());
+                        }
+                        if new_is_tab {
+                            collect_element_vnodes(&vnode_children(&nm_tab), &mut new_body);
+                        } else {
+                            new_body.push(new_tabs[i].clone());
+                        }
+                        if old_body.len() != new_body.len() {
+                            return Err(());
+                        }
+                        let mut y = 0.0_f64;
+                        for (co, cn) in old_body.iter().zip(new_body.iter()) {
+                            let h = patch_vnode(
+                                co,
+                                cn,
+                                &pane,
+                                &mut pane_slot,
+                                0.0,
+                                y,
+                                iw,
+                                Some(pane_h),
+                                ctx,
+                            )?;
+                            y += h;
+                        }
+                        if pane_slot != pane.subviews().count() as usize {
+                            return Err(());
+                        }
+                    }
+                    *slot += 1;
+                    Ok(pt + th + pb)
                 }
                 "image" => {
                     let v = subview(parent, *slot).ok_or(())?;

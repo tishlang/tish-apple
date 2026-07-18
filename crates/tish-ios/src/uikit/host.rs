@@ -14,6 +14,7 @@ use tishlang_ui::runtime::{Host, RootId};
 
 use super::build::{build_into, BuildCtx};
 use super::router::new_router;
+use super::text_view_delegate::IosTextViewDelegate;
 
 thread_local! {
     static WINDOW: RefCell<Option<(Retained<UIWindow>, Retained<UIView>)>> = RefCell::new(None);
@@ -30,9 +31,11 @@ impl IosHost {
     pub fn new(mtm: MainThreadMarker, root_id: RootId) -> Self {
         let (window, root) = ensure_ios_window(mtm);
         let router = new_router(mtm);
+        let text_view_delegate = IosTextViewDelegate::new(mtm);
         let ctx = BuildCtx {
             mtm,
             router,
+            text_view_delegate,
             root_id,
         };
         Self {

@@ -1,4 +1,5 @@
 // Pure-native UIKit hello — tish-apple host only (`tish:ios`).
+// Exercises slider / tabs / text_editor (+ existing button / state).
 // No tish-desktop, no broker/webview parity demo (that lives in tish-desktop/examples/hello-ios).
 //
 // From `examples/hello-ios/`: `npm install` then `npm run run`
@@ -7,13 +8,41 @@ import { ios, useState } from "tish:ios"
 
 fn App() {
   let [count, setCount] = useState(0)
+  let [level, setLevel] = useState(40)
+  let [tab, setTab] = useState(0)
+  let [notes, setNotes] = useState("notes…")
+
   return (
-    <scrollable height={640}>
+    <scrollable height={720}>
       <h1>UIKit + Tish</h1>
       <p>{"ios.run(App) — pure native host tags (tish-apple)."}</p>
       <space height={8} />
       <span>{"Count: " + count}</span>
       <button onClick={() => setCount(count + 1)}>{"Increment"}</button>
+      <space height={12} />
+      <span>{"Slider: " + level}</span>
+      <slider
+        min={0}
+        max={100}
+        value={level}
+        onChange={(v) => setLevel(Math.round(v))}
+      />
+      <space height={12} />
+      <tabs height={220} selected={tab} onChange={(i) => setTab(i)}>
+        <tab label={"One"}>
+          <p>{"Tab one — count " + count}</p>
+        </tab>
+        <tab label={"Two"}>
+          <p>{"Tab two — level " + level}</p>
+        </tab>
+      </tabs>
+      <space height={12} />
+      <span>{"Text editor"}</span>
+      <text_editor
+        height={120}
+        value={notes}
+        onChange={(s) => setNotes(s)}
+      />
     </scrollable>
   )
 }

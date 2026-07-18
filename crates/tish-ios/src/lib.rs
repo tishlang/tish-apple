@@ -3,6 +3,8 @@
 mod broker;
 mod dialog;
 mod notifications;
+mod store;
+mod webview_cmds;
 
 #[cfg(target_os = "ios")]
 mod uikit;

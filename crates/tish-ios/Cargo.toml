@@ -23,6 +23,7 @@ objc2-foundation = { version = "0.3", default-features = true, features = [
     "NSError",
     "NSURL",
     "NSURLRequest",
+    "NSUserDefaults",
     "block2",
 ] }
 block2 = "0.6"
@@ -46,8 +47,11 @@ objc2-ui-kit = { version = "0.3", default-features = true, features = [
     "UIImageView",
     "UIAlertController",
     "UITextField",
+    "UITextView",
     "UITextInputTraits",
     "UISwitch",
+    "UISlider",
+    "UISegmentedControl",
     "UIResponder",
 ] }
 objc2-core-foundation = { version = "0.3", default-features = true, features = [

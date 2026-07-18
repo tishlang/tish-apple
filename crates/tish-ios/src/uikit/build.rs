@@ -3,17 +3,19 @@
 use std::rc::Rc;
 
 use objc2::rc::Retained;
-use objc2::runtime::AnyObject;
+use objc2::runtime::{AnyObject, ProtocolObject};
 use objc2::{sel, ClassType, MainThreadMarker};
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_foundation::{NSObjectProtocol, NSString, NSURL, NSURLRequest};
 use objc2_ui_kit::{
     UIButton, UIButtonType, UIControlEvents, UIControlState, UIColor, UIFont, UIImage,
-    UIImageView, UILabel, UIScrollView, UISwitch, UITextBorderStyle, UITextField,
-    UITextInputTraits, UIView, UIViewAutoresizing, UIViewContentMode,
+    UIImageView, UILabel, UIScrollView, UISegmentedControl, UISlider, UISwitch,
+    UITextBorderStyle, UITextField, UITextInputTraits, UITextView, UIView,
+    UIViewAutoresizing, UIViewContentMode,
 };
 use tish_apple_common::handlers::{
-    register_bool_handler, register_click_handler, register_text_change_handler,
+    register_bool_handler, register_click_handler, register_f64_handler,
+    register_text_change_handler,
 };
 use tish_apple_common::style::{props_bool, props_f64, props_string};
 use tish_apple_common::tag::canonical_host_tag;
@@ -21,6 +23,7 @@ use tishlang_core::{ObjectMap, PropMap, Value};
 use tishlang_ui::runtime::{is_fragment_tag, RootId};
 
 use super::router::IosControlRouter;
+use super::text_view_delegate::IosTextViewDelegate;
 use super::webview_bridge;
 use super::wk_webview::WKWebView;
 
@@ -28,6 +31,7 @@ use super::wk_webview::WKWebView;
 pub struct BuildCtx {
     pub mtm: MainThreadMarker,
     pub router: Retained<IosControlRouter>,
+    pub text_view_delegate: Retained<IosTextViewDelegate>,
     pub root_id: RootId,
 }
 
@@ -291,6 +295,96 @@ fn wire_bool_change(props: &PropMap, sw: &UISwitch, ctx: &BuildCtx) {
     }
 }
 
+fn wire_slider_change(props: &PropMap, sl: &UISlider, ctx: &BuildCtx) {
+    if let Some(Value::Function(f)) = props.get("onChange").or_else(|| props.get("onInput")) {
+        let f = f.clone();
+        let idx = register_f64_handler(
+            ctx.root_id,
+            Rc::new(move |v| {
+                let _ = f.call(&[Value::Number(v)]);
+            }),
+        ) as isize;
+        sl.setTag(idx);
+        unsafe {
+            let p = Retained::as_ptr(&ctx.router).cast::<AnyObject>();
+            sl.addTarget_action_forControlEvents(
+                Some(&*p),
+                sel!(jsxSliderChanged:),
+                UIControlEvents::ValueChanged,
+            );
+        }
+    }
+}
+
+fn wire_segment_change(props: &PropMap, seg: &UISegmentedControl, ctx: &BuildCtx) {
+    // Always wire for show/hide; optional onChange receives selected index.
+    if let Some(Value::Function(f)) = props.get("onChange").or_else(|| props.get("onSelect")) {
+        let f = f.clone();
+        let idx = register_f64_handler(
+            ctx.root_id,
+            Rc::new(move |v| {
+                let _ = f.call(&[Value::Number(v)]);
+            }),
+        ) as isize;
+        seg.setTag(idx);
+    }
+    unsafe {
+        let p = Retained::as_ptr(&ctx.router).cast::<AnyObject>();
+        seg.addTarget_action_forControlEvents(
+            Some(&*p),
+            sel!(jsxSegmentChanged:),
+            UIControlEvents::ValueChanged,
+        );
+    }
+}
+
+fn wire_text_view_change(props: &PropMap, tv: &UITextView, ctx: &BuildCtx) {
+    if let Some(Value::Function(f)) = props.get("onChange").or_else(|| props.get("onInput")) {
+        let f = f.clone();
+        let idx = register_text_change_handler(
+            ctx.root_id,
+            Rc::new(move |s: String| {
+                let _ = f.call(&[Value::String(s.into())]);
+            }),
+        ) as isize;
+        tv.setTag(idx);
+        unsafe {
+            tv.setDelegate(Some(ProtocolObject::from_ref(&*ctx.text_view_delegate)));
+        }
+    }
+}
+
+fn collect_tab_specs(children: &[Value]) -> Vec<(String, Vec<Value>)> {
+    let mut out = Vec::new();
+    let mut elems = Vec::new();
+    collect_element_vnodes(children, &mut elems);
+    for c in elems {
+        match &c {
+            Value::Object(o) => {
+                let m = &o.borrow().strings;
+                let is_tab = matches!(
+                    m.get("tag"),
+                    Some(Value::String(s)) if {
+                        let t = s.as_str();
+                        t == "tab" || t == "Tab"
+                    }
+                );
+                let p = vnode_props(m);
+                let lbl = props_string(&p, &["label", "title", "name"])
+                    .unwrap_or_else(|| "Tab".into());
+                let body = if is_tab {
+                    vnode_children(m)
+                } else {
+                    vec![c.clone()]
+                };
+                out.push((lbl, body));
+            }
+            _ => out.push(("Tab".into(), vec![c.clone()])),
+        }
+    }
+    out
+}
+
 fn make_text_field(mtm: MainThreadMarker, props: &PropMap, secure: bool) -> Retained<UITextField> {
     let tf = UITextField::new(mtm);
     tf.setBorderStyle(UITextBorderStyle::RoundedRect);
@@ -376,13 +470,18 @@ fn layout_vnode(
                     let mut elems = Vec::new();
                     collect_element_vnodes(&children, &mut elems);
                     let n = elems.len().max(1);
-                    let cw = iw / n as f64;
+                    let gap = props_f64(&props, &["gap", "columnGap", "column_gap"], 0.0);
+                    let total_gap = gap * (n.saturating_sub(1) as f64);
+                    let cw = ((iw - total_gap) / n as f64).max(0.0);
                     let mut cx = ix;
                     let mut max_h = 0.0_f64;
-                    for c in &elems {
+                    for (i, c) in elems.iter().enumerate() {
                         let h = layout_vnode(c, parent, cx, iy, cw, None, ctx);
                         max_h = max_h.max(h);
                         cx += cw;
+                        if i + 1 < elems.len() {
+                            cx += gap;
+                        }
                     }
                     pt + max_h.max(44.0) + pb
                 }
@@ -449,6 +548,85 @@ fn layout_vnode(
                     freeze_autoresizing(&sw);
                     parent.addSubview(&sw);
                     pt + h + pb
+                }
+                "slider" => {
+                    let sl = UISlider::new(mtm);
+                    let minv = props_f64(&props, &["min"], 0.0) as f32;
+                    let maxv = props_f64(&props, &["max"], 100.0) as f32;
+                    sl.setMinimumValue(minv);
+                    sl.setMaximumValue(maxv);
+                    sl.setValue(props_f64(&props, &["value"], minv as f64) as f32);
+                    wire_slider_change(&props, &sl, ctx);
+                    let h = props_f64(&props, &["height", "h"], 44.0);
+                    place(&sl, ix, iy, iw, h);
+                    freeze_autoresizing(&sl);
+                    parent.addSubview(&sl);
+                    pt + h + pb
+                }
+                "text_editor" => {
+                    let base_h = scroll_outer_height(&props, avail_h);
+                    let min_h = props_f64(&props, &["minHeight", "min_height"], 120.0);
+                    let th = base_h.max(min_h);
+                    let tv = UITextView::new(mtm);
+                    tv.setEditable(true);
+                    let fs = props_f64(&props, &["fontSize", "font_size"], 17.0);
+                    tv.setFont(Some(&UIFont::systemFontOfSize(fs)));
+                    tv.setTextColor(Some(&UIColor::labelColor()));
+                    tv.setBackgroundColor(Some(&UIColor::secondarySystemBackgroundColor()));
+                    let initial =
+                        props_string(&props, &["value", "defaultValue"]).unwrap_or_default();
+                    tv.setText(Some(&NSString::from_str(&initial)));
+                    wire_text_view_change(&props, &tv, ctx);
+                    place(&tv, ix, iy, iw, th);
+                    freeze_autoresizing(&tv);
+                    parent.addSubview(&tv);
+                    pt + th + pb
+                }
+                "tabs" => {
+                    let th = props_f64(&props, &["height", "h"], avail_h.unwrap_or(200.0));
+                    let tab_specs = collect_tab_specs(&children);
+                    let seg_h = 32.0_f64;
+                    let gap = 8.0_f64;
+                    let pane_h = (th - seg_h - gap).max(40.0);
+                    let outer = UIView::new(mtm);
+                    place(&outer, ix, iy, iw, th);
+                    freeze_autoresizing(&outer);
+                    let seg = UISegmentedControl::new(mtm);
+                    for (i, (label, _)) in tab_specs.iter().enumerate() {
+                        seg.insertSegmentWithTitle_atIndex_animated(
+                            Some(&NSString::from_str(label)),
+                            i,
+                            false,
+                        );
+                    }
+                    let selected = props_f64(&props, &["selected", "value"], 0.0) as isize;
+                    let max_i = (tab_specs.len().saturating_sub(1)) as isize;
+                    let selected = selected.max(0).min(max_i.max(0));
+                    if !tab_specs.is_empty() {
+                        seg.setSelectedSegmentIndex(selected);
+                    }
+                    place(&seg, 0.0, 0.0, iw, seg_h);
+                    freeze_autoresizing(&seg);
+                    outer.addSubview(&seg);
+                    wire_segment_change(&props, &seg, ctx);
+                    let content = UIView::new(mtm);
+                    place(&content, 0.0, seg_h + gap, iw, pane_h);
+                    freeze_autoresizing(&content);
+                    for (i, (_, body)) in tab_specs.iter().enumerate() {
+                        let pane = UIView::new(mtm);
+                        place(&pane, 0.0, 0.0, iw, pane_h);
+                        freeze_autoresizing(&pane);
+                        let mut y = 0.0_f64;
+                        for cc in body {
+                            let h = layout_vnode(cc, &pane, 0.0, y, iw, Some(pane_h), ctx);
+                            y += h;
+                        }
+                        pane.setHidden((i as isize) != selected);
+                        content.addSubview(&pane);
+                    }
+                    outer.addSubview(&content);
+                    parent.addSubview(&outer);
+                    pt + th + pb
                 }
                 "image" => {
                     let src = props_string(&props, &["src", "path", "url"]).unwrap_or_default();

@@ -22,7 +22,7 @@ mod toolbar_delegate;
 pub(crate) mod webview_bridge;
 mod window_api;
 
-pub use webview_bridge::broadcast_event;
+pub use webview_bridge::{broadcast_event, broker_try_invoke as webview_broker_try_invoke};
 pub use notifications::{permission_state as notification_permission_state, request_permission as notification_request_permission, show as notification_show};
 
 use std::cell::{Cell, RefCell};
@@ -226,6 +226,10 @@ pub(super) fn notify_root_layout_changed(root_id: RootId, width: f64, height: f6
     LAST_NOTIFIED_SIZE.with(|m| {
         m.borrow_mut().insert(root_id, (width, height));
     });
+    // Do not queue a full host re-commit from `layout` — that re-enters AppKit layout
+    // (especially with height="fill" + setFrameSize) and beach-balls the main thread.
+    // Initial commit already receives contentView bounds; resize uses autoresizing masks
+    // on split/scroll fill surfaces. Sidebar hosts call `relayout_dual` explicitly.
     let _ = (root_id, width);
 }
 
@@ -589,8 +593,8 @@ fn create_content_host(
     open_opts: Option<&Value>,
 ) -> (Retained<NSWindow>, MacosRealHost) {
     let frame = NSRect::new(
-        CGPoint::new(80.0, 80.0),
-        CGSize::new(720.0, 520.0),
+        CGPoint::new(60.0, 60.0),
+        CGSize::new(1100.0, 640.0),
     );
     let style = NSWindowStyleMask::Closable
         | NSWindowStyleMask::Miniaturizable
@@ -621,7 +625,7 @@ fn create_content_host(
 
     let root = FlippedRootView::new(
         mtm,
-        NSRect::new(CGPoint::ZERO, CGSize::new(720.0, 520.0)),
+        NSRect::new(CGPoint::ZERO, CGSize::new(1100.0, 640.0)),
         root_id,
     );
     root.setAutoresizingMask(
@@ -1000,7 +1004,11 @@ fn macos_attach(args: &[Value]) -> Value {
     attach_app(app_fn, args.get(1).cloned())
 }
 
-/// Rust / desktop adapter entry: attach a Tish app root under an outer host.
+/// Rust / desktop adapter entry: attach a Tish app root.
+///
+/// Defaults (when omitted): `outerHost: true`, `autoRunEventLoop: false` — embed under
+/// an outer host (e.g. Tauri). Pass `outerHost: false` + `autoRunEventLoop: true` for a
+/// pure-native shell that owns `NSApplication.run`.
 pub fn attach_app(app_fn: Value, options: Option<Value>) -> Value {
     let mut opts = ObjectMap::default();
     if let Some(Value::Object(o)) = options.as_ref() {
@@ -1008,8 +1016,12 @@ pub fn attach_app(app_fn: Value, options: Option<Value>) -> Value {
             opts.insert(Arc::clone(k), v.clone());
         }
     }
-    opts.insert(Arc::from("outerHost"), Value::Bool(true));
-    opts.insert(Arc::from("autoRunEventLoop"), Value::Bool(false));
+    if !opts.contains_key("outerHost") {
+        opts.insert(Arc::from("outerHost"), Value::Bool(true));
+    }
+    if !opts.contains_key("autoRunEventLoop") {
+        opts.insert(Arc::from("autoRunEventLoop"), Value::Bool(false));
+    }
     if !opts.contains_key("autoShow") {
         opts.insert(Arc::from("autoShow"), Value::Bool(true));
     }

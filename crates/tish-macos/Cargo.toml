@@ -11,19 +11,24 @@ tish-apple-common = { path = "../tish-apple-common" }
 tishlang_core = { path = "../../../tish/crates/tish_core" }
 tishlang_ui = { path = "../../../tish/crates/tish_ui", default-features = false, features = ["runtime"] }
 tishlang_runtime = { path = "../../../tish/crates/tish_runtime" }
+# BrokerCore crate under desktop umbrella (crate only — not tish_desktop).
+tish_broker = { path = "../../../tish-desktop/crates/tish_broker" }
+serde_json = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2 = { version = "0.6", default-features = true }
+objc2 = { version = "0.6", default-features = true, features = ["exception"] }
 objc2-foundation = { version = "0.3", default-features = true, features = [
     "NSDate",
     "NSTimer",
     "NSData",
     "NSString",
     "NSError",
+    "NSURL",
+    "NSURLRequest",
+    "NSBundle",
     "block2",
 ] }
 block2 = "0.6"
-serde_json = "1"
 objc2-app-kit = { version = "0.3", default-features = true, features = [
     "objc2-quartz-core",
     "NSVisualEffectView",
@@ -34,6 +39,7 @@ objc2-app-kit = { version = "0.3", default-features = true, features = [
     "NSToolbar",
     "NSScreen",
     "NSSound",
+    "NSAlert",
     "NSUserInterfaceItemIdentification",
 ] }
 objc2-core-foundation = { version = "0.3", default-features = true, features = [

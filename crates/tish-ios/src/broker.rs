@@ -16,6 +16,12 @@ impl CapBackend for IosCaps {
         if cmd.starts_with("dialog.") {
             return Some(crate::dialog::invoke(cmd, args));
         }
+        if cmd.starts_with("webview.") {
+            return crate::webview_cmds::invoke(cmd, args);
+        }
+        if cmd.starts_with("store.") {
+            return crate::store::invoke(cmd, args);
+        }
         None
     }
 }

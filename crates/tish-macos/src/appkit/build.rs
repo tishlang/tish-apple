@@ -774,6 +774,28 @@ pub(super) fn row_wants_click_overlay(props: &PropMap) -> bool {
         .is_some_and(|v| matches!(v, Value::Function(_)))
 }
 
+/// Index of the last **element** child (ignores JSX whitespace `String` nodes).
+/// `Column` gives remaining `avail_h` to this child so `height="fill"` is not swallowed by a trailing `"\n"`.
+pub(super) fn last_element_child_index(children: &[Value]) -> Option<usize> {
+    let mut last = None;
+    for (i, c) in children.iter().enumerate() {
+        match c {
+            Value::Object(o) => {
+                let m = &o.borrow().strings;
+                let tag = m.get("tag").unwrap_or(&Value::Null);
+                if is_fragment_tag(tag) || matches!(tag, Value::String(_)) {
+                    last = Some(i);
+                }
+            }
+            Value::String(s) if !s.as_str().trim().is_empty() => {
+                last = Some(i);
+            }
+            _ => {}
+        }
+    }
+    last
+}
+
 /// Column widths for [`Row`]: equal split, `weights={[1,2,1]}`, or **`columnWidths`** for Notes-style sidebars.
 ///
 /// `columnWidths={[22, null, 44]}` → fixed 22px and 44px columns; **`null`** (or `0` or `"flex"`) marks a
@@ -1245,11 +1267,12 @@ pub fn commit_vnode(
                 .unwrap_or_default();
             if is_fragment_tag(map.get("tag").unwrap_or(&Value::Null)) {
                 let ch = vnode_children(&map);
-                let h_child = if ch.len() == 1 { avail_h } else { None };
+                let fill_i = last_element_child_index(&ch);
                 let mut y = y_top;
                 let mut hsum = 0.0;
-                for c in &ch {
-                    let h = commit_vnode(c, parent, x, y, avail_w, h_child, ctx);
+                for (i, c) in ch.iter().enumerate() {
+                    let child_avail = if fill_i == Some(i) { avail_h } else { None };
+                    let h = commit_vnode(c, parent, x, y, avail_w, child_avail, ctx);
                     y += h;
                     hsum += h;
                 }
@@ -1380,19 +1403,23 @@ pub fn commit_vnode(
                     let mut consumed = 0.0_f64;
                     if let Some(ah) = avail_h {
                         let content_h = (ah - pt - pb).max(0.0);
-                        if n >= 2 {
-                            for c in &children[..n - 1] {
-                                let h = commit_vnode(c, parent, ix, y, iw, None, ctx);
-                                y += h;
-                                consumed += h;
-                            }
-                            let rem = (content_h - consumed).max(1.0);
-                            let h_last =
-                                commit_vnode(&children[n - 1], parent, ix, y, iw, Some(rem), ctx);
-                            consumed += h_last;
-                        } else {
-                            consumed =
-                                commit_vnode(&children[0], parent, ix, y, iw, Some(content_h), ctx);
+                        // Give remaining height to the last *element* child — not a trailing
+                        // JSX whitespace string (those made height="fill" fall back to 200).
+                        let fill_i = last_element_child_index(&children).unwrap_or(n - 1);
+                        for c in &children[..fill_i] {
+                            let h = commit_vnode(c, parent, ix, y, iw, None, ctx);
+                            y += h;
+                            consumed += h;
+                        }
+                        let rem = (content_h - consumed).max(1.0);
+                        let h_fill =
+                            commit_vnode(&children[fill_i], parent, ix, y, iw, Some(rem), ctx);
+                        y += h_fill;
+                        consumed += h_fill;
+                        for c in &children[fill_i + 1..] {
+                            let h = commit_vnode(c, parent, ix, y, iw, None, ctx);
+                            y += h;
+                            consumed += h;
                         }
                         pt + consumed + pb
                     } else {

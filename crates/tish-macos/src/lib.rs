@@ -25,7 +25,8 @@
 //! `<webview bridge={true} id="…" onBridgeInvoke={…} />` injects `window.__TISH_APP__` (compat
 //! `__TISH_DESKTOP__`) via `WKUserContentController` + `webkit.messageHandlers.tish`, matching the
 //! desktop Tauri bridge contract (`invoke` / `listen` / `emit`). Native helpers:
-//! **`macos.webviewEval(surfaceId, js)`**, **`macos.webviewPostMessage(surfaceId, event, payload?)`**.
+//! **`macos.webviewEval(surfaceId, js)`**, **`macos.webviewPostMessage(surfaceId, event, payload?)`**
+//! (aliases of broker **`webview.eval`** / **`webview.postMessage`**; also **`webview.load`** / **`webview.list`**).
 //! Handlers: **`onBridgeInvoke`**, **`onBridgeEmit`**. Remove handlers on teardown (no retain cycles).
 //!
 //! ## Local notifications
@@ -82,7 +83,7 @@ mod appkit;
 #[cfg(target_os = "macos")]
 pub use appkit::{
     attach_app, broadcast_event, macos_object, notification_permission_state,
-    notification_request_permission, notification_show,
+    notification_request_permission, notification_show, webview_broker_try_invoke,
 };
 
 #[cfg(not(target_os = "macos"))]
@@ -115,6 +116,19 @@ pub fn notification_show(_title: &str, _body: &str) -> Result<(), String> {
 
 #[cfg(not(target_os = "macos"))]
 pub fn broadcast_event(_event: &str, _payload: &Value) {}
+
+/// Non-macOS stub — no host WK panes.
+#[cfg(not(target_os = "macos"))]
+pub fn webview_broker_try_invoke(
+    cmd: &str,
+    _args: &serde_json::Value,
+) -> Option<Result<serde_json::Value, String>> {
+    if cmd.starts_with("webview.") {
+        Some(Ok(tish_broker::unsupported_on("webview", "macos")))
+    } else {
+        None
+    }
+}
 
 /// Non-macOS stub: `macos.run` logs; `window.*`, `useState`, and `useMemo` resolve for CI `cargo check`.
 #[cfg(not(target_os = "macos"))]

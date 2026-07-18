@@ -4,7 +4,8 @@ pub mod host;
 mod build;
 mod patch;
 mod router;
-mod webview_bridge;
+mod text_view_delegate;
+pub(crate) mod webview_bridge;
 mod wk_webview;
 
 use std::sync::Arc;

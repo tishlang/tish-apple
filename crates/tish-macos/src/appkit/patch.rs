@@ -19,16 +19,15 @@ use tishlang_core::{ObjectMap, PropMap, Value};
 use tishlang_ui::runtime::is_fragment_tag;
 
 use super::build::{
-    apply_button_chrome, effective_props, freeze_autoresizing_for_manual_frames, options_strings,
-    padding_insets, place, place_visual_effect_document, props_bool, props_f64, props_string,
-    row_child_widths, row_cross_align,
-    row_shell_outer_height, row_shell_reposition_children, row_wants_click_overlay, RowCrossAlign,
-    scroll_outer_height, split_divider_style, split_pane_layout, split_pane_vnodes,
-    split_uses_vertical_divider, visual_effect_intrinsic_outer_height,
-    apply_scroll_content_right_gutter, apply_scroll_scroller_top_inset,
-    label_text_from_children, scroll_scroller_right_gutter_from_props, sync_scroll_view_for_document,
-    apply_visual_effect_view_from_props, text_view_set_string_without_delegate_notice,
-    vnode_children, vnode_props, BuildCtx,
+    apply_button_chrome, effective_props, freeze_autoresizing_for_manual_frames, last_element_child_index,
+    options_strings, padding_insets, place, place_visual_effect_document, props_bool, props_f64,
+    props_string, row_child_widths, row_cross_align, row_shell_outer_height,
+    row_shell_reposition_children, row_wants_click_overlay, RowCrossAlign, scroll_outer_height,
+    split_divider_style, split_pane_layout, split_pane_vnodes, split_uses_vertical_divider,
+    visual_effect_intrinsic_outer_height, apply_scroll_content_right_gutter,
+    apply_scroll_scroller_top_inset, label_text_from_children, scroll_scroller_right_gutter_from_props,
+    sync_scroll_view_for_document, apply_visual_effect_view_from_props,
+    text_view_set_string_without_delegate_notice, vnode_children, vnode_props, BuildCtx,
 };
 use super::flipped::{snap_flipped_split_panes_full_height, FlippedVisualEffectView};
 use super::style::{
@@ -328,11 +327,12 @@ fn patch_vnode(
                 if ch_old.len() != ch_new.len() {
                     return Err(());
                 }
-                let h_pass = if ch_old.len() == 1 { avail_h } else { None };
+                let fill_i = last_element_child_index(&ch_new);
                 let mut y = y_top;
                 let mut hsum = 0.0;
-                for (co, cn) in ch_old.iter().zip(ch_new.iter()) {
-                    let h = patch_vnode(co, cn, parent, slot, x, y, avail_w, h_pass, ctx)?;
+                for (i, (co, cn)) in ch_old.iter().zip(ch_new.iter()).enumerate() {
+                    let child_avail = if fill_i == Some(i) { avail_h } else { None };
+                    let h = patch_vnode(co, cn, parent, slot, x, y, avail_w, child_avail, ctx)?;
                     y += h;
                     hsum += h;
                 }
@@ -488,41 +488,34 @@ fn patch_vnode(
                     }
                     if let Some(ah) = avail_h {
                         let content_h = (ah - pt - pb).max(0.0);
-                        if n >= 2 {
-                            let mut y = iy;
-                            let mut used = 0.0_f64;
-                            for (co, cn) in och.iter().zip(children.iter()).take(n - 1) {
-                                let h = patch_vnode(co, cn, parent, slot, ix, y, iw, None, ctx)?;
-                                y += h;
-                                used += h;
-                            }
-                            let rem = (content_h - used).max(1.0);
-                            let h_last = patch_vnode(
-                                &och[n - 1],
-                                &children[n - 1],
-                                parent,
-                                slot,
-                                ix,
-                                y,
-                                iw,
-                                Some(rem),
-                                ctx,
-                            )?;
-                            Ok(pt + used + h_last + pb)
-                        } else {
-                            let h = patch_vnode(
-                                &och[0],
-                                &children[0],
-                                parent,
-                                slot,
-                                ix,
-                                iy,
-                                iw,
-                                Some(content_h),
-                                ctx,
-                            )?;
-                            Ok(pt + h + pb)
+                        let fill_i = last_element_child_index(&children).unwrap_or(n - 1);
+                        let mut y = iy;
+                        let mut used = 0.0_f64;
+                        for (co, cn) in och.iter().zip(children.iter()).take(fill_i) {
+                            let h = patch_vnode(co, cn, parent, slot, ix, y, iw, None, ctx)?;
+                            y += h;
+                            used += h;
                         }
+                        let rem = (content_h - used).max(1.0);
+                        let h_fill = patch_vnode(
+                            &och[fill_i],
+                            &children[fill_i],
+                            parent,
+                            slot,
+                            ix,
+                            y,
+                            iw,
+                            Some(rem),
+                            ctx,
+                        )?;
+                        y += h_fill;
+                        used += h_fill;
+                        for (co, cn) in och.iter().zip(children.iter()).skip(fill_i + 1) {
+                            let h = patch_vnode(co, cn, parent, slot, ix, y, iw, None, ctx)?;
+                            y += h;
+                            used += h;
+                        }
+                        Ok(pt + used + pb)
                     } else {
                         let mut y = iy;
                         let mut total = 0.0_f64;
@@ -1344,11 +1337,26 @@ fn patch_vnode(
                     let v = subview(parent, *slot).ok_or(())?;
                     let wv = unsafe { as_webview(&*v).ok_or(())? };
                     let th = scroll_outer_height(&props, avail_h);
-                    let src = props_string(&props, &["src", "url"]).unwrap_or_default();
-                    if let Some(url) = NSURL::URLWithString(&NSString::from_str(&src)) {
-                        let req = NSURLRequest::requestWithURL(&url);
-                        unsafe {
-                            let _ = wv.loadRequest(&req);
+                    // Only navigate when src/html actually change. Parent setState (e.g. hybrid
+                    // Increment) must not reloadRequest the same URL — that wiped the WK page.
+                    let old_src = props_string(&old_props, &["src", "url"]).unwrap_or_default();
+                    let new_src = props_string(&props, &["src", "url"]).unwrap_or_default();
+                    let old_html = props_string(&old_props, &["html"]).unwrap_or_default();
+                    let new_html = props_string(&props, &["html"]).unwrap_or_default();
+                    if new_html != old_html && !new_html.is_empty() {
+                        if let Some(ref sid) = new_id {
+                            let _ = super::webview_bridge::load_content(
+                                sid,
+                                None,
+                                Some(new_html.as_str()),
+                            );
+                        }
+                    } else if new_src != old_src && !new_src.is_empty() {
+                        if let Some(url) = NSURL::URLWithString(&NSString::from_str(&new_src)) {
+                            let req = NSURLRequest::requestWithURL(&url);
+                            unsafe {
+                                let _ = wv.loadRequest(&req);
+                            }
                         }
                     }
                     if new_bridge {

@@ -1,4 +1,8 @@
-//! UIKit host for Tish JSX (`tish:ios`).
+//! UIKit host for Tish JSX (`tish:ios`) with in-process BrokerCore (`state.*` / `invoke`).
+
+mod broker;
+mod dialog;
+mod notifications;
 
 #[cfg(target_os = "ios")]
 mod uikit;
@@ -6,13 +10,16 @@ mod uikit;
 #[cfg(target_os = "ios")]
 pub use uikit::ios_object;
 
+#[cfg(target_os = "ios")]
+pub use uikit::broadcast_event;
+
 #[cfg(not(target_os = "ios"))]
 use std::sync::Arc;
 
 #[cfg(not(target_os = "ios"))]
 use tishlang_core::{ObjectMap, Value};
 
-/// Non-iOS stub for `cargo check` on macOS/Linux CI.
+/// Non-iOS stub for `cargo check` on macOS/Linux CI — still exposes broker APIs.
 #[cfg(not(target_os = "ios"))]
 pub fn ios_object() -> Value {
     let noop = Value::native(|_a: &[Value]| Value::Null);
@@ -22,8 +29,14 @@ pub fn ios_object() -> Value {
     });
     let mut ios_inner = ObjectMap::default();
     ios_inner.insert(Arc::from("run"), run);
+    ios_inner.insert(Arc::from("invoke"), Value::native(broker::native_invoke));
+    ios_inner.insert(Arc::from("stateGet"), Value::native(broker::native_state_get));
+    ios_inner.insert(Arc::from("stateSet"), Value::native(broker::native_state_set));
+    ios_inner.insert(Arc::from("webviewEval"), noop.clone());
+    ios_inner.insert(Arc::from("webviewPostMessage"), noop.clone());
     let mut root = ObjectMap::default();
     root.insert(Arc::from("ios"), Value::object(ios_inner));
+    root.insert(Arc::from("invoke"), Value::native(broker::native_invoke));
     root.insert(
         Arc::from("useState"),
         Value::native(tishlang_ui::runtime::native_use_state),
@@ -47,3 +60,5 @@ pub fn ios_object() -> Value {
     root.insert(Arc::from("Window"), noop);
     Value::object(root)
 }
+
+pub use broker::{invoke_json, native_invoke, native_state_get, native_state_set};

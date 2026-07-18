@@ -1,0 +1,140 @@
+// Kitchen sink: exercises `tish:macos` vnode tags + `window` API.
+// From this directory: `npm install` then `npm run dev`.
+
+import { macos, window, useState, useMemo } from "tish:macos"
+
+// Module-level factory for `useMemo`: static intro + layout (deps `[]` → one vnode subtree cached per root).
+fn staticHeaderAndLayout() {
+  return (
+    <div>
+      <h1>{"tish-macos kitchen sink"}</h1>
+      <p>{"Manual checklist: examples/kitchen-sink-macos/README.md"}</p>
+
+      <h2>{"Window API"}</h2>
+      <row>
+        <button onClick={() => window.setTitle("Kitchen sink — titled")}>{"Set title"}</button>
+        <button onClick={() => window.setContentSize(800, 560)}>{"Content 800×560"}</button>
+        <button onClick={() => window.setMinContentSize(400, 320)}>{"Min size"}</button>
+        <button onClick={() => window.focus()}>{"Focus"}</button>
+      </row>
+      <row>
+        <button onClick={() => window.minimize()}>{"Minimize"}</button>
+        <button onClick={() => window.zoom()}>{"Zoom"}</button>
+        <button onClick={() => window.close()}>{"Close"}</button>
+      </row>
+
+      <rule />
+      <h2>{"Layout: space, padding, rule, scroll"}</h2>
+      <div padding={12}>
+        <text>{"Padded div (padding 12)"}</text>
+      </div>
+      <row>
+        <text>{"Left"}</text>
+        <space width={32} height={8} />
+        <text>{"Right (space w=32)"}</text>
+      </row>
+      <scrollable height={100}>
+        <text>{"Scroll line 1"}</text>
+        <text>{"Scroll line 2"}</text>
+        <text>{"Scroll line 3"}</text>
+        <text>{"Scroll line 4"}</text>
+        <text>{"Scroll line 5"}</text>
+      </scrollable>
+    </div>
+  )
+}
+
+fn App() {
+  let [name, setName] = useState("")
+  let [secret, setSecret] = useState("")
+  let [checked, setChecked] = useState(false)
+  let [toggleOn, setToggleOn] = useState(false)
+  let [volume, setVolume] = useState(40.0)
+  let [pickIdx, setPickIdx] = useState(0)
+  let [radioBand, setRadioBand] = useState(0)
+  let [prog, setProg] = useState(0.45)
+
+  let fruits = ["Apple", "Banana", "Cherry"]
+  let bands = ["AM", "FM", "DAB"]
+  let listRows = ["List row one", "List row two", "List row three"]
+
+  let headerAndLayout = useMemo(staticHeaderAndLayout, [])
+
+  return (
+    <scrollable height={"fill"} direction="vertical">
+      {headerAndLayout}
+      <text>{"Inner: " + window.innerWidth() + " × " + window.innerHeight()}</text>
+
+      <rule />
+      <h2>{"Text fields"}</h2>
+      <textinput value={name} onChange={(v) => setName(v)} />
+      <text>{"Hello, " + name}</text>
+      <password value={secret} onChange={(v) => setSecret(v)} />
+      <text>{"Secret chars: " + secret.length}</text>
+
+      <rule />
+      <h2>{"Checkbox, toggler, slider, progress"}</h2>
+      <checkbox checked={checked} onChange={(v) => setChecked(v)}>
+        {"Checkbox"}
+      </checkbox>
+      <row>
+        <text>{"NSSwitch"}</text>
+        <toggler checked={toggleOn} onChange={(v) => setToggleOn(v)} />
+      </row>
+      <text>{"Volume: " + volume}</text>
+      <slider min={0} max={100} value={volume} onChange={(v) => setVolume(v)} />
+      <text>{"Determinate progress (drag slider to drive)"}</text>
+      <progress_bar value={prog} max={1} />
+      <text>{"Indeterminate spinner"}</text>
+      <progress_bar indeterminate={true} />
+      <slider min={0} max={1} value={prog} onChange={(v) => setProg(v)} />
+
+      <rule />
+      <h2>{"Pick list + radio"}</h2>
+      <pick_list options={fruits} selected={pickIdx} onChange={(i) => setPickIdx(i)} />
+      <text>{"Pick index: " + pickIdx}</text>
+      <radio options={bands} value={radioBand} onChange={(i) => setRadioBand(i)} />
+      <text>{"Radio index: " + radioBand}</text>
+
+      <rule />
+      <h2>{"Image, wrapping text, tooltip"}</h2>
+      <image src="NSComputer" height={64} />
+      <text wrap={true} height={56}>
+        {"Wrapping label: " + "Lorem ipsum dolor sit amet, consectetur adipiscing elit. "}
+      </text>
+      <tooltip title={"Hover the row below"}>
+        <text>{"Tooltip target"}</text>
+      </tooltip>
+
+      <rule />
+      <h2>{"List, tabs, split, webview"}</h2>
+      <list height={100} rows={listRows} />
+      <tabs height={160}>
+        <tab label={"Alpha"}>
+          <text>{"First tab body"}</text>
+        </tab>
+        <tab label={"Beta"}>
+          <text>{"Second tab body"}</text>
+        </tab>
+      </tabs>
+      <split height={120} orientation="vertical">
+        <text>{"Split pane A"}</text>
+        <text>{"Split pane B"}</text>
+      </split>
+      <webview
+        id={"bridge-demo"}
+        bridge={true}
+        height={160}
+        src={"data:text/html,<!doctype html><meta charset=utf-8><body style='font:14px system-ui'><button id=b>Ping bridge</button><pre id=o></pre><script>document.getElementById('b').onclick=async()=>{const r=await window.__TISH_APP__.invoke('ping',{n:1});document.getElementById('o').textContent=JSON.stringify(r)}</script></body>"}
+        onBridgeInvoke={(msg) => {
+          if (msg.cmd === "ping") {
+            return { ok: true, pong: msg.args.n }
+          }
+          return { ok: false, code: "unsupported", capability: msg.cmd }
+        }}
+      />
+    </scrollable>
+  )
+}
+
+macos.run(App)

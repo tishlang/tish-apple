@@ -4,20 +4,25 @@ use std::rc::Rc;
 
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2::{sel, MainThreadMarker};
+use objc2::{sel, ClassType, MainThreadMarker};
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
-use objc2_foundation::NSString;
+use objc2_foundation::{NSObjectProtocol, NSString, NSURL, NSURLRequest};
 use objc2_ui_kit::{
     UIButton, UIButtonType, UIControlEvents, UIControlState, UIColor, UIFont, UIImage,
-    UIImageView, UILabel, UIScrollView, UIView, UIViewAutoresizing, UIViewContentMode,
+    UIImageView, UILabel, UIScrollView, UISwitch, UITextBorderStyle, UITextField,
+    UITextInputTraits, UIView, UIViewAutoresizing, UIViewContentMode,
 };
-use tish_apple_common::handlers::register_click_handler;
-use tish_apple_common::style::props_f64;
+use tish_apple_common::handlers::{
+    register_bool_handler, register_click_handler, register_text_change_handler,
+};
+use tish_apple_common::style::{props_bool, props_f64, props_string};
 use tish_apple_common::tag::canonical_host_tag;
 use tishlang_core::{ObjectMap, PropMap, Value};
 use tishlang_ui::runtime::{is_fragment_tag, RootId};
 
 use super::router::IosControlRouter;
+use super::webview_bridge;
+use super::wk_webview::WKWebView;
 
 #[derive(Clone)]
 pub struct BuildCtx {
@@ -26,29 +31,38 @@ pub struct BuildCtx {
     pub root_id: RootId,
 }
 
-pub fn clear_subviews(view: &UIView) {
-    let subs = view.subviews();
-    let n = subs.count();
-    for i in (0..n).rev() {
-        subs.objectAtIndex(i).removeFromSuperview();
-    }
+pub(crate) fn place(view: &UIView, x: f64, y: f64, w: f64, h: f64) {
+    view.setFrame(CGRect::new(
+        CGPoint::new(x, y),
+        CGSize::new(w.max(0.0), h.max(0.0)),
+    ));
 }
 
-fn vnode_children(obj: &PropMap) -> Vec<Value> {
+pub(crate) fn freeze_autoresizing(view: &UIView) {
+    view.setAutoresizingMask(UIViewAutoresizing::empty());
+}
+
+pub(crate) fn fill_autoresizing(view: &UIView) {
+    view.setAutoresizingMask(
+        UIViewAutoresizing::FlexibleWidth | UIViewAutoresizing::FlexibleHeight,
+    );
+}
+
+pub(crate) fn vnode_children(obj: &PropMap) -> Vec<Value> {
     match obj.get("children") {
         Some(Value::Array(a)) => a.borrow().clone(),
         _ => vec![],
     }
 }
 
-fn vnode_props(obj: &PropMap) -> PropMap {
+pub(crate) fn vnode_props(obj: &PropMap) -> PropMap {
     match obj.get("props") {
         Some(Value::Object(o)) => o.borrow().strings.clone(),
-        _ => ObjectMap::default(),
+        _ => PropMap::default(),
     }
 }
 
-fn collect_element_vnodes(children: &[Value], out: &mut Vec<Value>) {
+pub(crate) fn collect_element_vnodes(children: &[Value], out: &mut Vec<Value>) {
     for c in children {
         match c {
             Value::Object(o) => {
@@ -67,7 +81,32 @@ fn collect_element_vnodes(children: &[Value], out: &mut Vec<Value>) {
     }
 }
 
-fn text_from_children(children: &[Value]) -> String {
+pub(crate) fn padding_insets(props: &PropMap) -> (f64, f64, f64, f64) {
+    let pt = props_f64(props, &["paddingTop", "padding_top", "pt"], 0.0);
+    let pr = props_f64(props, &["paddingRight", "padding_right", "pr"], 0.0);
+    let pb = props_f64(props, &["paddingBottom", "padding_bottom", "pb"], 0.0);
+    let pl = props_f64(props, &["paddingLeft", "padding_left", "pl"], 0.0);
+    let all = props_f64(props, &["padding", "p"], 0.0);
+    let pt = if pt > 0.0 { pt } else { all };
+    let pr = if pr > 0.0 { pr } else { all };
+    let pb = if pb > 0.0 { pb } else { all };
+    let pl = if pl > 0.0 { pl } else { all };
+    (pt, pr, pb, pl)
+}
+
+pub(crate) fn scroll_outer_height(props: &PropMap, avail_h: Option<f64>) -> f64 {
+    if let Some(h) = props.get("height").and_then(|v| v.as_number()) {
+        if h.is_finite() && h > 0.0 {
+            return h;
+        }
+    }
+    if let Some(h) = avail_h {
+        return h.max(120.0);
+    }
+    props_f64(props, &["height", "h"], 200.0)
+}
+
+pub(crate) fn text_from_children(children: &[Value]) -> String {
     children
         .iter()
         .map(|v| v.to_display_string())
@@ -77,7 +116,26 @@ fn text_from_children(children: &[Value]) -> String {
         .to_string()
 }
 
-fn style_label(label: &UILabel, tag: Option<&str>) {
+pub fn clear_subviews(view: &UIView) {
+    let subs = view.subviews();
+    let n = subs.count();
+    for i in (0..n).rev() {
+        let sv = subs.objectAtIndex(i);
+        if sv.isKindOfClass(WKWebView::class()) {
+            let wv: &WKWebView = unsafe { &*std::ptr::from_ref(&*sv).cast::<WKWebView>() };
+            webview_bridge::detach_bridge(wv);
+        }
+        sv.removeFromSuperview();
+    }
+}
+
+fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
+    pm.iter()
+        .map(|(k, v)| (std::sync::Arc::clone(k), v.clone()))
+        .collect()
+}
+
+pub(crate) fn style_label(label: &UILabel, tag: Option<&str>) {
     unsafe {
         label.setTextColor(Some(&UIColor::labelColor()));
         label.setNumberOfLines(0);
@@ -103,7 +161,7 @@ fn default_text_height(tag: Option<&str>) -> f64 {
     }
 }
 
-fn measure_text_height(text: &str, width: f64, tag: Option<&str>) -> f64 {
+pub(crate) fn measure_text_height(text: &str, width: f64, tag: Option<&str>) -> f64 {
     let min = default_text_height(tag);
     if text.is_empty() {
         return min;
@@ -115,23 +173,6 @@ fn measure_text_height(text: &str, width: f64, tag: Option<&str>) -> f64 {
     let chars_per_line = (width / 8.0).max(24.0);
     let lines = (text.len() as f64 / chars_per_line).ceil().max(1.0);
     (lines * line_h).max(min)
-}
-
-fn place(view: &UIView, x: f64, y: f64, w: f64, h: f64) {
-    view.setFrame(CGRect::new(
-        CGPoint::new(x, y),
-        CGSize::new(w.max(0.0), h.max(0.0)),
-    ));
-}
-
-fn freeze_autoresizing(view: &UIView) {
-    view.setAutoresizingMask(UIViewAutoresizing::empty());
-}
-
-fn fill_autoresizing(view: &UIView) {
-    view.setAutoresizingMask(
-        UIViewAutoresizing::FlexibleWidth | UIViewAutoresizing::FlexibleHeight,
-    );
 }
 
 fn canvas_rgba_from_value(canvas: &Value) -> Option<(usize, usize, Vec<u8>)> {
@@ -191,7 +232,7 @@ fn wire_on_click(props: &PropMap, btn: &UIButton, ctx: &BuildCtx) {
     if let Some(Value::Function(f)) = props.get("onClick").or_else(|| props.get("onclick")) {
         let f = f.clone();
         let idx = register_click_handler(ctx.root_id, Rc::new(move || {
-            let _ = f(&[]);
+            let _ = f.call(&[]);
         })) as isize;
         btn.setTag(idx);
         unsafe {
@@ -203,6 +244,76 @@ fn wire_on_click(props: &PropMap, btn: &UIButton, ctx: &BuildCtx) {
             );
         }
     }
+}
+
+fn wire_text_change(props: &PropMap, tf: &UITextField, ctx: &BuildCtx) {
+    if let Some(Value::Function(f)) = props.get("onChange").or_else(|| props.get("onInput")) {
+        let f = f.clone();
+        let idx = register_text_change_handler(
+            ctx.root_id,
+            Rc::new(move |s: String| {
+                let _ = f.call(&[Value::String(s.into())]);
+            }),
+        ) as isize;
+        tf.setTag(idx);
+        unsafe {
+            let p = Retained::as_ptr(&ctx.router).cast::<AnyObject>();
+            tf.addTarget_action_forControlEvents(
+                Some(&*p),
+                sel!(jsxTextChanged:),
+                UIControlEvents::EditingChanged,
+            );
+        }
+    }
+}
+
+fn wire_bool_change(props: &PropMap, sw: &UISwitch, ctx: &BuildCtx) {
+    if let Some(Value::Function(f)) = props
+        .get("onChange")
+        .or_else(|| props.get("onToggle"))
+    {
+        let f = f.clone();
+        let idx = register_bool_handler(
+            ctx.root_id,
+            Rc::new(move |b| {
+                let _ = f.call(&[Value::Bool(b)]);
+            }),
+        ) as isize;
+        sw.setTag(idx);
+        unsafe {
+            let p = Retained::as_ptr(&ctx.router).cast::<AnyObject>();
+            sw.addTarget_action_forControlEvents(
+                Some(&*p),
+                sel!(jsxBoolChanged:),
+                UIControlEvents::ValueChanged,
+            );
+        }
+    }
+}
+
+fn make_text_field(mtm: MainThreadMarker, props: &PropMap, secure: bool) -> Retained<UITextField> {
+    let tf = UITextField::new(mtm);
+    tf.setBorderStyle(UITextBorderStyle::RoundedRect);
+    let value = props_string(props, &["value", "defaultValue"]).unwrap_or_default();
+    tf.setText(Some(&NSString::from_str(&value)));
+    if let Some(ph) = props_string(props, &["placeholder", "hint"]) {
+        tf.setPlaceholder(Some(&NSString::from_str(&ph)));
+    }
+    if secure {
+        tf.setSecureTextEntry(true);
+    }
+    tf
+}
+
+fn load_ui_image(src: &str, symbol: bool) -> Option<Retained<UIImage>> {
+    let name = NSString::from_str(src);
+    if symbol {
+        return UIImage::systemImageNamed(&name);
+    }
+    if src.starts_with('/') || src.contains('/') {
+        return UIImage::imageWithContentsOfFile(&name);
+    }
+    UIImage::imageNamed(&name).or_else(|| UIImage::systemImageNamed(&name))
 }
 
 fn layout_vnode(
@@ -217,7 +328,7 @@ fn layout_vnode(
     let mtm = ctx.mtm;
     match v {
         Value::String(s) => {
-            let t = s.as_ref().trim();
+            let t = s.as_str().trim();
             if t.is_empty() {
                 return 0.0;
             }
@@ -309,6 +420,76 @@ fn layout_vnode(
                     parent.addSubview(&btn);
                     pt + h + pb
                 }
+                "textinput" => {
+                    let tf = make_text_field(mtm, &props, false);
+                    wire_text_change(&props, &tf, ctx);
+                    let h = props_f64(&props, &["height", "h"], 44.0);
+                    place(&tf, ix, iy, iw, h);
+                    freeze_autoresizing(&tf);
+                    parent.addSubview(&tf);
+                    pt + h + pb
+                }
+                "password" => {
+                    let tf = make_text_field(mtm, &props, true);
+                    wire_text_change(&props, &tf, ctx);
+                    let h = props_f64(&props, &["height", "h"], 44.0);
+                    place(&tf, ix, iy, iw, h);
+                    freeze_autoresizing(&tf);
+                    parent.addSubview(&tf);
+                    pt + h + pb
+                }
+                "toggler" | "checkbox" => {
+                    let sw = UISwitch::new(mtm);
+                    let on = props_bool(&props, &["checked", "value"], false);
+                    sw.setOn_animated(on, false);
+                    wire_bool_change(&props, &sw, ctx);
+                    let h = props_f64(&props, &["height", "h"], 44.0);
+                    let w = 60.0_f64.min(iw);
+                    place(&sw, ix, iy + ((h - 31.0) * 0.5).max(0.0), w, 31.0);
+                    freeze_autoresizing(&sw);
+                    parent.addSubview(&sw);
+                    pt + h + pb
+                }
+                "image" => {
+                    let src = props_string(&props, &["src", "path", "url"]).unwrap_or_default();
+                    let symbol = props_bool(&props, &["symbol", "sfSymbol", "sf_symbol"], false);
+                    let iv = UIImageView::new(mtm);
+                    iv.setContentMode(UIViewContentMode::ScaleAspectFit);
+                    iv.setClipsToBounds(true);
+                    if let Some(img) = load_ui_image(&src, symbol) {
+                        iv.setImage(Some(&img));
+                    }
+                    let h = props_f64(&props, &["height", "h"], 48.0);
+                    place(&iv, ix, iy, iw, h);
+                    freeze_autoresizing(&iv);
+                    parent.addSubview(&iv);
+                    pt + h + pb
+                }
+                "space" => {
+                    let h = props_f64(&props, &["height", "h", "size"], 12.0);
+                    pt + h + pb
+                }
+                "rule" => {
+                    let line = UIView::new(mtm);
+                    line.setBackgroundColor(Some(&UIColor::grayColor()));
+                    let h = props_f64(&props, &["height", "h"], 1.0).max(1.0);
+                    place(&line, ix, iy, iw, h);
+                    freeze_autoresizing(&line);
+                    parent.addSubview(&line);
+                    pt + h.max(8.0) + pb
+                }
+                "webview" => {
+                    let th = scroll_outer_height(&props, avail_h);
+                    let src = props_string(&props, &["src", "url"]).unwrap_or_default();
+                    let html = props_string(&props, &["html", "htmlContent", "document"]);
+                    let frame = CGRect::new(CGPoint::ZERO, CGSize::new(iw, th));
+                    let wv = webview_bridge::create_webview(ctx.mtm, ctx.root_id, frame, &props);
+                    load_webview_content(&wv, html.as_deref(), &src);
+                    place(&*wv, ix, iy, iw, th);
+                    freeze_autoresizing(&*wv);
+                    parent.addSubview(&*wv);
+                    pt + th + pb
+                }
                 "text" => {
                     let text = text_from_children(&children);
                     let label = UILabel::new(mtm);
@@ -327,11 +508,12 @@ fn layout_vnode(
                         std::sync::Arc::from("rootId"),
                         Value::Number(ctx.root_id as f64),
                     );
+                    let scene_obj = propmap_to_object_map(&scene_props);
                     let view = tish_apple_common::scene_host::create_scene_view(
                         mtm,
                         iw,
                         h,
-                        Some(&scene_props),
+                        Some(&scene_obj),
                     );
                     place(&view, ix, iy, iw, h);
                     freeze_autoresizing(&view);
@@ -379,40 +561,112 @@ fn layout_vnode(
     }
 }
 
-fn padding_insets(props: &PropMap) -> (f64, f64, f64, f64) {
-    let pt = props_f64(props, &["paddingTop", "padding_top", "pt"], 0.0);
-    let pr = props_f64(props, &["paddingRight", "padding_right", "pr"], 0.0);
-    let pb = props_f64(props, &["paddingBottom", "padding_bottom", "pb"], 0.0);
-    let pl = props_f64(props, &["paddingLeft", "padding_left", "pl"], 0.0);
-    let all = props_f64(props, &["padding", "p"], 0.0);
-    let pt = if pt > 0.0 { pt } else { all };
-    let pr = if pr > 0.0 { pr } else { all };
-    let pb = if pb > 0.0 { pb } else { all };
-    let pl = if pl > 0.0 { pl } else { all };
-    (pt, pr, pb, pl)
-}
-
-fn scroll_outer_height(props: &ObjectMap, avail_h: Option<f64>) -> f64 {
-    if let Some(h) = props.get("height").and_then(|v| v.as_number()) {
-        if h.is_finite() && h > 0.0 {
-            return h;
+/// Load HTML into a WKWebView. Prefer `html` / `loadHTMLString` over raw `data:` URLs —
+/// `NSURL` rejects unencoded `data:text/html,…` bodies (spaces/quotes → blank pane).
+fn load_webview_content(wv: &WKWebView, html: Option<&str>, src: &str) {
+    if let Some(doc) = html.filter(|s| !s.is_empty()) {
+        unsafe {
+            wv.loadHTMLString_baseURL(&NSString::from_str(doc), None);
+        }
+        return;
+    }
+    if src.is_empty() {
+        return;
+    }
+    const PREFIX: &str = "data:text/html,";
+    if let Some(rest) = src.strip_prefix(PREFIX) {
+        // Accept both raw and percent-encoded bodies after the comma.
+        let body = percent_decode_minimal(rest);
+        unsafe {
+            wv.loadHTMLString_baseURL(&NSString::from_str(&body), None);
+        }
+        return;
+    }
+    if let Some(url) = NSURL::URLWithString(&NSString::from_str(src)) {
+        let req = NSURLRequest::requestWithURL(&url);
+        unsafe {
+            wv.loadRequest(&req);
         }
     }
-    if let Some(h) = avail_h {
-        return h.max(120.0);
-    }
-    props_f64(props, &["height", "h"], 200.0)
 }
 
-/// Commit a vnode tree into `root` (clears existing subviews).
-pub fn build_into(v: &Value, root: &UIView, width: f64, height: f64, ctx: &BuildCtx) {
+fn percent_decode_minimal(s: &str) -> String {
+    // Only needed when callers percent-encode; raw HTML passes through unchanged
+    // when it contains no `%` sequences WK would have rejected as a URL anyway.
+    if !s.contains('%') {
+        return s.to_string();
+    }
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let h = |c: u8| -> Option<u8> {
+                match c {
+                    b'0'..=b'9' => Some(c - b'0'),
+                    b'a'..=b'f' => Some(c - b'a' + 10),
+                    b'A'..=b'F' => Some(c - b'A' + 10),
+                    _ => None,
+                }
+            };
+            if let (Some(a), Some(b)) = (h(bytes[i + 1]), h(bytes[i + 2])) {
+                out.push((a << 4) | b);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8(out).unwrap_or_else(|_| s.to_string())
+}
+
+/// Content insets for the root host view: safe-area + a small gutter.
+/// Returns `(left, top, right, bottom)`.
+pub(crate) fn root_content_insets(root: &UIView) -> (f64, f64, f64, f64) {
+    let gutter = 8.0;
+    let insets = root.safeAreaInsets();
+    let mut top = insets.top as f64;
+    let mut bottom = insets.bottom as f64;
+    let left = insets.left as f64;
+    let right = insets.right as f64;
+    // Before the window finishes laying out, safe-area can be zero — keep
+    // controls below the status bar / Dynamic Island on modern iPhones.
+    if top < 20.0 {
+        top = 59.0;
+    }
+    if bottom < 1.0 {
+        bottom = 34.0;
+    }
+    (
+        left + gutter,
+        top + gutter,
+        right + gutter,
+        bottom + gutter,
+    )
+}
+
+/// Commit a vnode tree into `root`. Prefers in-place patch when `prev` matches shape.
+pub fn build_into(
+    v: &Value,
+    root: &UIView,
+    width: f64,
+    height: f64,
+    ctx: &BuildCtx,
+    prev: Option<&Value>,
+) {
+    if let Some(p) = prev {
+        if super::patch::try_patch_vtree(p, v, root, width, height, ctx).is_some() {
+            return;
+        }
+    }
     clear_subviews(root);
-    tish_apple_common::handlers::clear_click_handlers_for_root(ctx.root_id);
+    tish_apple_common::handlers::clear_all_handlers_for_root(ctx.root_id);
     fill_autoresizing(root);
     place(root, 0.0, 0.0, width, height);
     root.setBackgroundColor(Some(&UIColor::systemBackgroundColor()));
-    let pad = 8.0;
-    let top = 8.0;
-    let inner_w = (width - pad * 2.0).max(0.0);
-    let _ = layout_vnode(v, root, pad, top, inner_w, Some(height - top - pad), ctx);
+    let (left, top, right, bottom) = root_content_insets(root);
+    let inner_w = (width - left - right).max(0.0);
+    let avail_h = (height - top - bottom).max(0.0);
+    let _ = layout_vnode(v, root, left, top, inner_w, Some(avail_h), ctx);
 }

@@ -22,6 +22,7 @@ use objc2_core_foundation::{CGFloat, CGPoint, CGSize};
 use objc2_foundation::{NSEdgeInsets, NSObjectProtocol, NSRect, NSString, NSURL, NSURLRequest};
 use objc2_web_kit::WKWebView;
 pub(super) use tish_apple_common::style::{props_bool, props_f64, props_string};
+use super::webview_bridge;
 use tishlang_core::{ObjectMap, PropMap, Value};
 
 fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
@@ -126,6 +127,7 @@ unsafe fn detach_hooks_rec(view: &NSView) {
     }
     if view.isKindOfClass(WKWebView::class()) {
         let wv: &WKWebView = &*std::ptr::from_ref(view).cast::<WKWebView>();
+        webview_bridge::detach_bridge(wv);
         unsafe {
             wv.setNavigationDelegate(None);
             wv.setUIDelegate(None);
@@ -2127,7 +2129,7 @@ pub fn commit_vnode(
                     let th = scroll_outer_height(&props, avail_h);
                     let src = props_string(&props, &["src", "url"]).unwrap_or_default();
                     let frame = NSRect::new(CGPoint::ZERO, CGSize::new(iw, th));
-                    let wv = unsafe { WKWebView::initWithFrame(WKWebView::alloc(ctx.mtm), frame) };
+                    let wv = webview_bridge::create_webview(ctx.mtm, ctx.root_id, frame, &props);
                     if let Some(url) = NSURL::URLWithString(&NSString::from_str(&src)) {
                         let req = NSURLRequest::requestWithURL(&url);
                         unsafe {

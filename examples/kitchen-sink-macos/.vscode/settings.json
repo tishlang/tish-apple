@@ -1,0 +1,4 @@
+{
+  "tish.languageServerPath": "${workspaceFolder}/../../../tish/target/debug/tish-lsp",
+  "tish.tishlangSourceRoot": "${workspaceFolder}/../../../tish"
+}

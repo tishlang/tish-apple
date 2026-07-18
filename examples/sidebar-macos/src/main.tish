@@ -1,0 +1,419 @@
+// Notes-style three-pane demo: middle `ZStack` is `GroupedTable` + `VisualEffect`; the host reparents the
+// header effect **into** the `NSScrollView` (above the clip, below the scroller) so list rows blur under frosted chrome.
+
+import { macos, window, SidebarWindow, useState, useEffect } from "tish:macos"
+
+// --- Design tokens (match Notes dark sidebar references) ---
+let SIDEBAR_BG = "#1e1b26"
+let ROW_SELECTED_BG = "#2d2b38"
+let ACCENT_PINK = "#ff4b91"
+let MUTED_TEXT = "#75757a"
+// Fixed leading/trailing columns: proportional `weights` alone widens the icon→label gap as the sidebar grows.
+let NOTES_SIDEBAR_COL_WIDTHS = [20, 0, 46]
+let NOTES_SIDEBAR_WEIGHTS = [1, 1, 1]
+let SIDEBAR_SCROLL_PL = 8
+let SIDEBAR_ROW_INSET = 5
+// Match `VisualEffect`+toolbar row outer heights so list/editor/sidebar content scrolls under the blur.
+let SIDEBAR_OVERLAY_TOP_INSET = 38
+let NOTES_LIST_OVERLAY_TOP_INSET = 52
+let EDITOR_TOOLBAR_OVERLAY_TOP_INSET = 40
+// Middle pane meets the window edge when the AppKit sidebar is collapsed; keep controls clear of the traffic lights.
+fn folder_row_bg(sel, i) {
+  if (sel === i) {
+    return ROW_SELECTED_BG
+  }
+  return "transparent"
+}
+
+fn folder_icon_name(sel, idx) {
+  if (sel === idx && idx === 0) {
+    return "folder.fill"
+  }
+  return "folder"
+}
+
+fn folder_icon_tint(sel, i) {
+  if (sel === i && i === 0) {
+    return ACCENT_PINK
+  }
+  return "label"
+}
+
+fn folder_label_color(sel, i) {
+  if (sel === i && i === 0) {
+    return ACCENT_PINK
+  }
+  return "label"
+}
+
+fn notes_sidebar_folder_row_style(sel, idx) {
+  return {
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingLeft: SIDEBAR_ROW_INSET,
+    paddingRight: SIDEBAR_ROW_INSET,
+    borderRadius: 6,
+    backgroundColor: folder_row_bg(sel, idx),
+    alignItems: "center",
+  }
+}
+
+fn NotesSidebarFolderRow(sel, idx, label, countStr, onPick) {
+  return (
+    <Row
+      columnWidths={NOTES_SIDEBAR_COL_WIDTHS}
+      weights={NOTES_SIDEBAR_WEIGHTS}
+      onClick={onPick}
+      style={notes_sidebar_folder_row_style(sel, idx)}
+    >
+      <Image
+        src={folder_icon_name(sel, idx)}
+        symbol={true}
+        height={16}
+        symbolScale="small"
+        tint={folder_icon_tint(sel, idx)}
+      />
+      <Text style={{ fontSize: 13, color: folder_label_color(sel, idx) }}>{label}</Text>
+      <Text style={{ fontSize: 11, color: MUTED_TEXT, textAlign: "right" }}>{countStr}</Text>
+    </Row>
+  )
+}
+
+fn NotesSidebarSharedRow() {
+  return (
+    <VisualEffect material={"sidebar"} blendingMode={"behindWindow"} emphasized={true} height={34}>
+      <Row
+        columnWidths={NOTES_SIDEBAR_COL_WIDTHS}
+        weights={NOTES_SIDEBAR_WEIGHTS}
+        style={{
+          paddingTop: 5,
+          paddingBottom: 6,
+          paddingLeft: SIDEBAR_ROW_INSET,
+          paddingRight: SIDEBAR_ROW_INSET,
+          alignItems: "center",
+        }}
+      >
+        <Image src={"person.crop.circle"} symbol={true} height={16} symbolScale="small" tint={MUTED_TEXT} />
+        <Text style={{ fontSize: 13, color: "label" }}>{"Shared"}</Text>
+        <Text style={{ fontSize: 11, color: MUTED_TEXT, textAlign: "right" }}>{"78"}</Text>
+      </Row>
+    </VisualEffect>
+  )
+}
+
+fn note_row_style(note, i) {
+  if (note === i) {
+    return {
+      height: 48,
+      bezelStyle: "borderless",
+      backgroundColor: "transparent",
+      borderRadius: 4,
+      paddingLeft: 6,
+      paddingRight: 6,
+    }
+  }
+  return {
+    height: 48,
+    bezelStyle: "borderless",
+    backgroundColor: "transparent",
+    borderRadius: 4,
+    paddingLeft: 6,
+    paddingRight: 6,
+  }
+}
+
+fn ToolbarIcon(sym) {
+  return (
+    <Button
+      symbol={true}
+      src={sym}
+      symbolScale={"small"}
+      bezelStyle={"glass"}
+      style={{ height: 22, width: 26 }}
+      onClick={() => {}}
+    />
+  )
+}
+
+fn NotesListHeader(folder_title, folder_count, sidebarOpen, setSidebarOpen) {
+  let titles = (
+    <Column
+      style={{
+        padding: 0,
+        paddingTop: 0,
+        paddingBottom: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
+      }}
+    >
+      <Text style={{ fontSize: 15, fontWeight: "semibold", color: "label", textAlign: "left" }}>{folder_title}</Text>
+      <Text style={{ fontSize: 11, color: "secondaryLabel", textAlign: "left" }}>{folder_count + " notes"}</Text>
+    </Column>
+  )
+  let onToggle = () => {
+    window.toggleSidebar()
+    setSidebarOpen(!window.sidebarCollapsed())
+  }
+  let moreBtn = (
+    <Button
+      symbol={true}
+      src={"ellipsis.circle"}
+      symbolScale={"small"}
+      bezelStyle={"borderless"}
+      style={{ height: 28, width: 28 }}
+      onClick={() => {}}
+    />
+  )
+  if (sidebarOpen) {
+    return (
+      <Row
+        alignItems="flex-start"
+        columnWidths={[null, 34]}
+        weights={[1, 1]}
+        style={{
+          padding: 0,
+          paddingTop: 0,
+          paddingBottom: 0,
+          paddingLeft: 10,
+          paddingRight: 8,
+        }}
+      >
+        {titles}
+        {moreBtn}
+      </Row>
+    )
+  }
+  return (
+    <Row
+      alignItems="flex-start"
+      columnWidths={[30, null, 34]}
+      weights={[1, 1, 1]}
+      style={{
+        padding: 0,
+        paddingTop: 0,
+        paddingBottom: 0,
+        paddingLeft: 10,
+        paddingRight: 8,
+      }}
+    >
+      <Button
+        symbol={true}
+        src={"sidebar.left"}
+        symbolScale={"small"}
+        bezelStyle={"circular"}
+        style={{ height: 30, width: 30 }}
+        onClick={onToggle}
+      />
+      {titles}
+      {moreBtn}
+    </Row>
+  )
+}
+
+fn App() {
+  let [folder, setFolder] = useState(0)
+  let [note, setNote] = useState(0)
+  let [sidebarOpen, setSidebarOpen] = useState(true)
+
+  let folder_names = ["All iCloud", "Notes", "Pitch", "Quick Notes"]
+  let folder_nums = ["1,682", "1,477", "205", "0"]
+  let note_titles = ["Ascii", "Release checklist", "Ideas"]
+  let note_meta = [
+    "Apr 9, 2026 · https://example.com …",
+    "Yesterday · Stand-up notes",
+    "Mon · Short list",
+  ]
+  let note_bodies = [
+    "https://example.com\nhttps://developer.apple.com\n\nPaste more links here.",
+    "• Final QA\n• Tag build\n• Notify channel",
+    "• Sketch sidebar polish\n• Semantic colors in style{}",
+  ]
+
+  let [editorBody, setEditorBody] = useState(note_bodies[0])
+
+  useEffect(
+    () => {
+      setEditorBody(note_bodies[note])
+    },
+    [note]
+  )
+
+  useEffect(() => {
+    setSidebarOpen(!window.sidebarCollapsed())
+  }, [])
+
+  let folder_title = folder_names[folder]
+  let folder_count = folder_nums[folder]
+
+  return (
+    <SidebarWindow
+      appearance={"darkAqua"}
+      titlebarToolbar={false}
+      sidebarToolbarToggle={false}
+      sidebarTrackingSeparator={false}
+      sidebarMinWidth={268}
+      sidebarPreferredWidthFraction={0.215}
+    >
+      <ZStack height={"fill"}>
+        <ScrollView
+          height={"fill"}
+          direction="vertical"
+          drawsBackground={false}
+          documentTopInset={sidebarOpen ? SIDEBAR_OVERLAY_TOP_INSET : 0}
+          style={{
+            paddingLeft: SIDEBAR_SCROLL_PL,
+            paddingRight: 6,
+            paddingTop: 2,
+            paddingBottom: 6,
+          }}
+        >
+        {NotesSidebarSharedRow()}
+
+        <Text
+          style={{
+            fontSize: 11,
+            fontWeight: "semibold",
+            color: MUTED_TEXT,
+            paddingTop: 8,
+            paddingBottom: 4,
+            paddingLeft: SIDEBAR_SCROLL_PL + SIDEBAR_ROW_INSET,
+          }}
+        >
+          {"ICLOUD"}
+        </Text>
+
+        {NotesSidebarFolderRow(folder, 0, folder_names[0], folder_nums[0], () => setFolder(0))}
+        {NotesSidebarFolderRow(folder, 1, folder_names[1], folder_nums[1], () => setFolder(1))}
+        {NotesSidebarFolderRow(folder, 2, folder_names[2], folder_nums[2], () => setFolder(2))}
+        {NotesSidebarFolderRow(folder, 3, folder_names[3], folder_nums[3], () => setFolder(3))}
+        </ScrollView>
+
+        {sidebarOpen ? (
+          <Row
+            alignItems="center"
+            columnWidths={[null, 28]}
+            weights={[1, 1]}
+            style={{
+              paddingLeft: SIDEBAR_ROW_INSET,
+              paddingRight: SIDEBAR_ROW_INSET,
+              paddingTop: 6,
+              paddingBottom: 4,
+            }}
+          >
+            <Space width={1} height={1} />
+            <Button
+              symbol={true}
+              src={"sidebar.left"}
+              bezelStyle={"borderless"}
+              style={{ height: 20, width: 20, backgroundColor: "transparent" }}
+              onClick={() => {
+                window.toggleSidebar()
+                setSidebarOpen(!window.sidebarCollapsed())
+              }}
+            />
+          </Row>
+        ) : (
+          <Space width={1} height={1} />
+        )}
+      </ZStack>
+
+      <Split height={"fill"} orientation="horizontal" dividerStyle="thin" dividerPosition={280}>
+        <ZStack height={"fill"}>
+          <GroupedTable
+            height={"fill"}
+            documentTopInset={NOTES_LIST_OVERLAY_TOP_INSET}
+            vibrantSectionHeaders={false}
+            style={{
+              padding: 0,
+              paddingLeft: 12,
+              paddingRight: 10,
+              paddingTop: 0,
+            }}
+          >
+            <section title={"Previous 7 Days"}>
+              <Button style={note_row_style(note, 0)} onClick={() => setNote(0)}>
+                {note_titles[0] + "\n" + note_meta[0]}
+              </Button>
+              <Button style={note_row_style(note, 1)} onClick={() => setNote(1)}>
+                {note_titles[1] + "\n" + note_meta[1]}
+              </Button>
+            </section>
+            <section title={"Previous 30 Days"}>
+              <Button style={note_row_style(note, 2)} onClick={() => setNote(2)}>
+                {note_titles[2] + "\n" + note_meta[2]}
+              </Button>
+            </section>
+          </GroupedTable>
+          <VisualEffect
+            material={"header"}
+            blendingMode={"withinWindow"}
+            height={NOTES_LIST_OVERLAY_TOP_INSET}
+          >
+            {NotesListHeader(folder_title, folder_count, sidebarOpen, setSidebarOpen)}
+          </VisualEffect>
+        </ZStack>
+
+        <ZStack height={"fill"}>
+          <ScrollView
+            height={"fill"}
+            direction="vertical"
+            drawsBackground={false}
+            documentTopInset={EDITOR_TOOLBAR_OVERLAY_TOP_INSET}
+            style={{
+              paddingLeft: 16,
+              paddingRight: 16,
+              paddingTop: 0,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 11,
+                color: "secondaryLabel",
+                wrap: true,
+                paddingBottom: 8,
+              }}
+            >
+              {"April 12, 2026 at 3:00 PM"}
+            </Text>
+
+            <Text style={{ fontSize: 22, fontWeight: "bold", color: "label", paddingBottom: 8 }}>
+              {note_titles[note]}
+            </Text>
+
+            <TextEditor
+              minHeight={360}
+              fontSize={14}
+              value={editorBody}
+              onChange={(s) => setEditorBody(s)}
+            />
+          </ScrollView>
+          <Row
+            alignItems="center"
+            columnWidths={[26, 26, 26, 26, 26, 26, null, 26, 26, 26, 26]}
+            weights={[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
+            style={{
+              paddingLeft: 12,
+              paddingRight: 12,
+              paddingTop: 4,
+              paddingBottom: 6,
+            }}
+          >
+            {ToolbarIcon("square.and.pencil")}
+            {ToolbarIcon("textformat")}
+            {ToolbarIcon("checklist")}
+            {ToolbarIcon("tablecells")}
+            {ToolbarIcon("paperclip")}
+            {ToolbarIcon("pencil.and.scribble")}
+            <Space width={1} height={1} />
+            {ToolbarIcon("square.and.arrow.up")}
+            {ToolbarIcon("ellipsis.circle")}
+            {ToolbarIcon("magnifyingglass")}
+            {ToolbarIcon("folder.badge.plus")}
+          </Row>
+        </ZStack>
+      </Split>
+    </SidebarWindow>
+  )
+}
+
+macos.run(App, { title: "Notes", appearance: "darkAqua" })

@@ -14,6 +14,25 @@
 //! Run options may set **`appearance`** / **`nsAppearance`** (e.g. `"darkAqua"`) for the initial window.
 //!
 //! Returns **`null`** when `autoRunEventLoop` is true (default); otherwise returns **`{ show, runEventLoop, spawnPeer, nsWindow }`**.
+//!
+//! ## Attach / embed (outer host)
+//! When another host (e.g. Tauri) already owns `NSApplication`, menus, and timers, use:
+//! - **`macos.attach(App, options?)`** — sets `outerHost: true` and `autoRunEventLoop: false`; returns the run handle.
+//! - Or pass **`outerHost: true`** / **`skipMainMenu`** / **`skipTimerPump`** / **`skipActivationPolicy`** on `macos.run` / `openWindow`.
+//! Outer-host mode must not install a second main menu or timer pump.
+//!
+//! ## WKWebView script bridge
+//! `<webview bridge={true} id="…" onBridgeInvoke={…} />` injects `window.__TISH_APP__` (compat
+//! `__TISH_DESKTOP__`) via `WKUserContentController` + `webkit.messageHandlers.tish`, matching the
+//! desktop Tauri bridge contract (`invoke` / `listen` / `emit`). Native helpers:
+//! **`macos.webviewEval(surfaceId, js)`**, **`macos.webviewPostMessage(surfaceId, event, payload?)`**.
+//! Handlers: **`onBridgeInvoke`**, **`onBridgeEmit`**. Remove handlers on teardown (no retain cycles).
+//!
+//! ## Local notifications
+//! **`macos.notificationPermissionState()`**, **`macos.notificationRequestPermission()`**,
+//! **`macos.notificationShow(title, body?)`** — `UNUserNotificationCenter`. Rust:
+//! **`notification_permission_state`**, **`notification_request_permission`**, **`notification_show`**.
+//!
 //! **`macos.openWindow(App, options?)`** always opens an **additional** in-process window (new Tish root); use **`nsWindow`** on the returned handle for that window’s API.
 //! Application-wide helpers live on **`app`** (**`app.runEventLoop`**, **`app.spawnPeer`**, **`app.activate`**). Global **`window.*`** targets the **current** Tish root (the tree that is rendering or handling the callback).
 //! Sidebar shells also expose **`window.toggleSidebar()`** (maps to **`NSSplitViewController` `toggleSidebar:`**) and **`window.sidebarCollapsed()`** (whether the first split item, the sidebar pane, is collapsed).
@@ -61,12 +80,41 @@
 mod appkit;
 
 #[cfg(target_os = "macos")]
-pub use appkit::macos_object;
+pub use appkit::{
+    attach_app, broadcast_event, macos_object, notification_permission_state,
+    notification_request_permission, notification_show,
+};
 
 #[cfg(not(target_os = "macos"))]
 use std::sync::Arc;
 #[cfg(not(target_os = "macos"))]
 use tishlang_core::{ObjectMap, PropMap, Value};
+
+/// Non-macOS stub for desktop CI (`platform-apple` feature on Linux).
+#[cfg(not(target_os = "macos"))]
+pub fn attach_app(app_fn: Value, _options: Option<Value>) -> Value {
+    let _ = app_fn;
+    eprintln!("tishlang_macos: attach_app is only available on macOS.");
+    Value::Null
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn notification_permission_state() -> &'static str {
+    "prompt"
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn notification_request_permission() -> &'static str {
+    "prompt"
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn notification_show(_title: &str, _body: &str) -> Result<(), String> {
+    Err("notifications only available on macOS".into())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn broadcast_event(_event: &str, _payload: &Value) {}
 
 /// Non-macOS stub: `macos.run` logs; `window.*`, `useState`, and `useMemo` resolve for CI `cargo check`.
 #[cfg(not(target_os = "macos"))]
@@ -123,6 +171,30 @@ pub fn macos_object() -> Value {
     );
     macos_inner.insert(Arc::from("preferencesSet"), noop.clone());
     macos_inner.insert(Arc::from("playNamedSound"), noop.clone());
+    macos_inner.insert(
+        Arc::from("notificationPermissionState"),
+        Value::native(|_a: &[Value]| {
+            let mut o = ObjectMap::default();
+            o.insert(Arc::from("state"), Value::String("prompt".into()));
+            Value::object(o)
+        }),
+    );
+    macos_inner.insert(
+        Arc::from("notificationRequestPermission"),
+        Value::native(|_a: &[Value]| {
+            let mut o = ObjectMap::default();
+            o.insert(Arc::from("state"), Value::String("prompt".into()));
+            Value::object(o)
+        }),
+    );
+    macos_inner.insert(
+        Arc::from("notificationShow"),
+        Value::native(|_a: &[Value]| {
+            let mut o = ObjectMap::default();
+            o.insert(Arc::from("ok"), Value::Bool(false));
+            Value::object(o)
+        }),
+    );
     let macos_val = Value::object(macos_inner);
 
     let zero = Value::native(|_a: &[Value]| Value::Number(0.0));

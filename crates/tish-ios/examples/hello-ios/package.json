@@ -1,13 +1,10 @@
 {
-  "name": "hello-ios-example",
+  "name": "hello-ios-example-stub",
   "private": true,
-  "version": "0.0.0",
-  "description": "Sample iOS staticlib: tishlang_ui JSX + tish:ios run()",
-  "dependencies": {
-    "tish-ios": "file:../.."
-  },
+  "description": "Broker/parity iOS demos live in tish-desktop/examples/hello-ios — this crate is host-only",
   "scripts": {
-    "build": "cargo run --manifest-path ../../../../../tish/Cargo.toml -q -p tishlang -- build --target native --native-backend rust --crate-type staticlib --ios-triple aarch64-apple-ios-sim src/main.tish -o dist/hello-ios",
-    "dev": "echo 'Link dist/hello-ios staticlib in an Xcode iOS app target.'"
+    "build": "echo 'Use tish-desktop/examples/hello-ios (npm run example:hello-ios)' && exit 1",
+    "run": "echo 'Use tish-desktop/examples/hello-ios (npm run example:hello-ios)' && exit 1",
+    "dev": "echo 'Use tish-desktop/examples/hello-ios (npm run example:hello-ios)' && exit 1"
   }
 }

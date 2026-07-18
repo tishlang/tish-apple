@@ -159,7 +159,7 @@ fn SettingsApp() {
             paddingTop: 16,
           }}
         >
-          {"Prefs use NSUserDefaults keys under tish.aiMessenger.* — banners via macos.notificationShow (UNUserNotificationCenter)."}
+          {"Prefs use NSUserDefaults keys under tish.aiMessenger.* — UNUserNotificationCenter is not wired yet."}
         </Text>
       </ScrollView>
     </Window>
@@ -201,11 +201,18 @@ fn makeChatApp(chat) {
       let pN = macos.preferencesGet("notificationsEnabled")
       let notifOn = pN === null ? true : (pN === "1" || pN === "true")
       if (notifOn) {
-        // notifyBackgroundOnly: app-active gate TBD — always post for now
+        let pB = macos.preferencesGet("notifyBackgroundOnly")
+        let bgOnly = pB === null ? false : (pB === "1" || pB === "true")
+        if (bgOnly) {
+          console.log("[notify stub] background-only (would check app active)")
+        } else {
+          console.log("[notify stub] would post UNUserNotificationCenter banner")
+        }
         let pP = macos.preferencesGet("notifyShowPreview")
         let preview = pP === null ? true : (pP === "1" || pP === "true")
-        let body = preview ? ("You said: " + t) : "New message"
-        macos.notificationShow("Tish Messenger", body)
+        if (preview) {
+          console.log("[notify stub] preview text enabled")
+        }
       }
       let pS = macos.preferencesGet("playSoundEnabled")
       let soundOn = pS === null ? true : (pS === "1" || pS === "true")

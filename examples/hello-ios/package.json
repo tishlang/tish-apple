@@ -3,12 +3,16 @@
   "private": true,
   "version": "0.0.1",
   "license": "PIF",
-  "description": "Sample iOS staticlib: tishlang_ui JSX + tish:ios run()",
+  "description": "Pure-native UIKit hello: tish:ios host only (no tish-desktop). Cross-device broker/webview demo lives in tish-desktop/examples/hello-ios.",
   "dependencies": {
     "tish-ios": "file:../../crates/tish-ios"
   },
   "scripts": {
-    "build": "cargo run --manifest-path ../../../tish/Cargo.toml -q -p tishlang -- build --target native --native-backend rust --crate-type staticlib --ios-triple aarch64-apple-ios-sim src/main.tish -o dist/hello-ios",
-    "build:device": "cargo run --manifest-path ../../../tish/Cargo.toml -q -p tishlang -- build --target native --native-backend rust --crate-type staticlib --ios-triple aarch64-apple-ios src/main.tish -o dist/hello-ios"
+    "build": "cargo run --manifest-path ../../../tish/Cargo.toml -q -p tishlang -- build --target native --native-backend rust --crate-type staticlib --ios-triple aarch64-apple-ios-sim --platform ios --surface native src/main.tish -o dist/hello-ios",
+    "build:device": "cargo run --manifest-path ../../../tish/Cargo.toml -q -p tishlang -- build --target native --native-backend rust --crate-type staticlib --ios-triple aarch64-apple-ios --platform ios --surface native src/main.tish -o dist/hello-ios",
+    "xcodebuild:sim": "bash scripts/xcodebuild-sim.sh",
+    "launch:sim": "bash scripts/launch-sim.sh",
+    "run": "bash scripts/run-sim.sh",
+    "dev": "bash scripts/run-sim.sh"
   }
 }

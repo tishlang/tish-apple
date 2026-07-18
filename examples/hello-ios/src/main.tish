@@ -1,21 +1,20 @@
-// UIKit + Tish: `import { ios } from "tish:ios"` resolves tish-ios/package.json.
+// Pure-native UIKit hello — tish-apple host only (`tish:ios`).
+// No tish-desktop, no broker/webview parity demo (that lives in tish-desktop/examples/hello-ios).
 //
-// From `examples/hello-ios/`: `npm install` then `npm run build`
-// Open `ios-shell/HelloIos.xcodeproj` and run on an iOS Simulator.
+// From `examples/hello-ios/`: `npm install` then `npm run run`
 
 import { ios, useState } from "tish:ios"
 
 fn App() {
   let [count, setCount] = useState(0)
   return (
-    <div>
+    <scrollable height={640}>
       <h1>UIKit + Tish</h1>
-      <p>ios.run(App) maps this vnode tree to UIStackView / UILabel / UIButton.</p>
-      <div>
-        <span>{"Count: " + count}</span>
-        <button onClick={() => setCount(count + 1)}>{"Increment"}</button>
-      </div>
-    </div>
+      <p>{"ios.run(App) — pure native host tags (tish-apple)."}</p>
+      <space height={8} />
+      <span>{"Count: " + count}</span>
+      <button onClick={() => setCount(count + 1)}>{"Increment"}</button>
+    </scrollable>
   )
 }
 

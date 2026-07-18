@@ -6,6 +6,7 @@ mod scroll_chrome_embed;
 mod grouped_table;
 mod markdown_view;
 mod prefs;
+mod notifications;
 mod deferred_host;
 mod style;
 mod flipped;
@@ -18,7 +19,11 @@ pub(crate) mod session_bus;
 mod text_delegate;
 mod text_view_delegate;
 mod toolbar_delegate;
+pub(crate) mod webview_bridge;
 mod window_api;
+
+pub use webview_bridge::broadcast_event;
+pub use notifications::{permission_state as notification_permission_state, request_permission as notification_request_permission, show as notification_show};
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -424,15 +429,82 @@ fn install_timer_drain_pump() {
     drop(_timer);
 }
 
+/// Options when embedding AppKit under an outer host (e.g. Tauri) that already owns
+/// `NSApplication`, menus, and/or the timer pump. Prefer `outerHost: true` from Tish.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct AttachSetup {
+    pub skip_main_menu: bool,
+    pub skip_timer_pump: bool,
+    pub skip_activation_policy: bool,
+}
+
+impl Default for AttachSetup {
+    fn default() -> Self {
+        Self {
+            skip_main_menu: false,
+            skip_timer_pump: false,
+            skip_activation_policy: false,
+        }
+    }
+}
+
+impl AttachSetup {
+    /// Outer host owns the app: do not clobber menus, timers, or activation policy.
+    fn outer_host() -> Self {
+        Self {
+            skip_main_menu: true,
+            skip_timer_pump: true,
+            skip_activation_policy: true,
+        }
+    }
+}
+
+fn attach_setup_from_options(opt: Option<&Value>) -> AttachSetup {
+    let Some(Value::Object(o)) = opt else {
+        return AttachSetup::default();
+    };
+    let m = &o.borrow().strings;
+    let outer = match m.get("outerHost") {
+        Some(Value::Bool(b)) => *b,
+        Some(Value::Number(n)) => *n != 0.0,
+        _ => false,
+    };
+    let mut setup = if outer {
+        AttachSetup::outer_host()
+    } else {
+        AttachSetup::default()
+    };
+    if let Some(Value::Bool(b)) = m.get("skipMainMenu") {
+        setup.skip_main_menu = *b;
+    }
+    if let Some(Value::Bool(b)) = m.get("skipTimerPump") {
+        setup.skip_timer_pump = *b;
+    }
+    if let Some(Value::Bool(b)) = m.get("skipActivationPolicy") {
+        setup.skip_activation_policy = *b;
+    }
+    setup
+}
+
 fn ensure_macos_application_ready(mtm: MainThreadMarker) {
+    ensure_macos_application_ready_with(mtm, AttachSetup::default());
+}
+
+fn ensure_macos_application_ready_with(mtm: MainThreadMarker, setup: AttachSetup) {
     MACOS_APP_SETUP_DONE.with(|done| {
         if done.get() {
             return;
         }
         let app = NSApplication::sharedApplication(mtm);
-        app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
-        install_main_menu(mtm, &app);
-        install_timer_drain_pump();
+        if !setup.skip_activation_policy {
+            app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
+        }
+        if !setup.skip_main_menu {
+            install_main_menu(mtm, &app);
+        }
+        if !setup.skip_timer_pump {
+            install_timer_drain_pump();
+        }
         done.set(true);
     });
 }
@@ -864,11 +936,12 @@ fn macos_run(args: &[Value]) -> Value {
     let opt_ref = args.get(1);
     let (auto_show, auto_run_event_loop) = parse_run_options(opt_ref);
     let open_options = opt_ref.cloned();
+    let attach = attach_setup_from_options(opt_ref);
 
     ensure_session_id();
     set_detail_metrics_for_root(LEGACY_ROOT_ID, 0);
     let mtm = MainThreadMarker::new().expect("macos.run must run on the main thread");
-    ensure_macos_application_ready(mtm);
+    ensure_macos_application_ready_with(mtm, attach);
 
     install_host_for_root(
         LEGACY_ROOT_ID,
@@ -908,10 +981,39 @@ fn macos_run(args: &[Value]) -> Value {
 fn macos_open_window(args: &[Value]) -> Value {
     let root_id = alloc_root_id();
     let layout = open_layout_from_opts(args, OpenLayout::Content);
+    let attach = attach_setup_from_options(args.get(1));
+    let mtm = MainThreadMarker::new().expect("macos.openWindow needs the main thread");
+    ensure_macos_application_ready_with(mtm, attach);
     if macos_prepare_window_for_root(args, layout, root_id).is_none() {
         return Value::Null;
     }
     build_run_handle(root_id)
+}
+
+/// Embed under an outer host: `outerHost: true`, never runs `NSApplication.run`.
+/// Equivalent to `macos.run(app, { …, outerHost: true, autoRunEventLoop: false })`.
+fn macos_attach(args: &[Value]) -> Value {
+    let app_fn = match args.first() {
+        Some(f) => f.clone(),
+        None => return Value::Null,
+    };
+    attach_app(app_fn, args.get(1).cloned())
+}
+
+/// Rust / desktop adapter entry: attach a Tish app root under an outer host.
+pub fn attach_app(app_fn: Value, options: Option<Value>) -> Value {
+    let mut opts = ObjectMap::default();
+    if let Some(Value::Object(o)) = options.as_ref() {
+        for (k, v) in o.borrow().strings.iter() {
+            opts.insert(Arc::clone(k), v.clone());
+        }
+    }
+    opts.insert(Arc::from("outerHost"), Value::Bool(true));
+    opts.insert(Arc::from("autoRunEventLoop"), Value::Bool(false));
+    if !opts.contains_key("autoShow") {
+        opts.insert(Arc::from("autoShow"), Value::Bool(true));
+    }
+    macos_run(&[app_fn, Value::object(opts)])
 }
 
 fn macos_run_event_loop(_: &[Value]) -> Value {
@@ -923,13 +1025,23 @@ fn macos_run_event_loop(_: &[Value]) -> Value {
 pub fn macos_object() -> Value {
     let run = Value::native(macos_run);
     let open_window = Value::native(macos_open_window);
+    let attach = Value::native(macos_attach);
     let run_event_loop = Value::native(macos_run_event_loop);
     let post_sess = Value::native(post_session_message);
     let on_sess = Value::native(on_session_message);
     let mut macos_inner = ObjectMap::default();
     macos_inner.insert(Arc::from("run"), run);
     macos_inner.insert(Arc::from("openWindow"), open_window);
+    macos_inner.insert(Arc::from("attach"), attach);
     macos_inner.insert(Arc::from("runEventLoop"), run_event_loop);
+    macos_inner.insert(
+        Arc::from("webviewEval"),
+        Value::native(webview_bridge::native_webview_eval),
+    );
+    macos_inner.insert(
+        Arc::from("webviewPostMessage"),
+        Value::native(webview_bridge::native_webview_post_message),
+    );
     macos_inner.insert(Arc::from("postSessionMessage"), post_sess.clone());
     macos_inner.insert(Arc::from("onSessionMessage"), on_sess.clone());
     macos_inner.insert(
@@ -967,6 +1079,18 @@ pub fn macos_object() -> Value {
             prefs::play_named_sound(&name);
             Value::Null
         }),
+    );
+    macos_inner.insert(
+        Arc::from("notificationPermissionState"),
+        Value::native(notifications::native_permission_state),
+    );
+    macos_inner.insert(
+        Arc::from("notificationRequestPermission"),
+        Value::native(notifications::native_request_permission),
+    );
+    macos_inner.insert(
+        Arc::from("notificationShow"),
+        Value::native(notifications::native_show),
     );
     let macos_val = Value::object(macos_inner);
 

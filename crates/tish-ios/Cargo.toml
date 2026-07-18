@@ -10,16 +10,30 @@ tish-apple-common = { path = "../tish-apple-common" }
 tishlang_core = { path = "../../../tish/crates/tish_core" }
 tishlang_ui = { path = "../../../tish/crates/tish_ui", default-features = false, features = ["runtime"] }
 tishlang_runtime = { path = "../../../tish/crates/tish_runtime" }
+# BrokerCore crate lives under the desktop umbrella repo as a standalone package
+# (not the Tish language). Path dep only — tish-ios does not depend on tish_desktop.
+tish_broker = { path = "../../../tish-desktop/crates/tish_broker" }
+serde_json = "1"
 
 [target.'cfg(target_os = "ios")'.dependencies]
 objc2 = { version = "0.6", default-features = true }
-objc2-foundation = { version = "0.3", default-features = true, features = ["NSTimer", "block2"] }
+objc2-foundation = { version = "0.3", default-features = true, features = [
+    "NSTimer",
+    "NSString",
+    "NSError",
+    "NSURL",
+    "NSURLRequest",
+    "block2",
+] }
 block2 = "0.6"
+objc2-user-notifications = { version = "0.3", default-features = true }
 objc2-ui-kit = { version = "0.3", default-features = true, features = [
+    "block2",
     "UIApplication",
     "UIWindow",
     "UIViewController",
     "UIView",
+    "UIControl",
     "UILabel",
     "UIButton",
     "UIStackView",
@@ -30,10 +44,31 @@ objc2-ui-kit = { version = "0.3", default-features = true, features = [
     "UIScene",
     "UIImage",
     "UIImageView",
+    "UIAlertController",
+    "UITextField",
+    "UITextInputTraits",
+    "UISwitch",
+    "UIResponder",
 ] }
-objc2-core-foundation = { version = "0.3", default-features = true, features = ["CFCGTypes", "CFData"] }
+objc2-core-foundation = { version = "0.3", default-features = true, features = [
+    "CFCGTypes",
+    "CFData",
+    "CFDate",
+    "CFRunLoop",
+] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = [
     "CGColorSpace",
     "CGDataProvider",
     "CGImage",
+] }
+# WKWebView type is macOS-only in objc2-web-kit; we bind UIView WKWebView locally.
+objc2-web-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "block2",
+    "objc2-core-foundation",
+    "WKWebViewConfiguration",
+    "WKUserContentController",
+    "WKUserScript",
+    "WKScriptMessage",
+    "WKScriptMessageHandler",
 ] }

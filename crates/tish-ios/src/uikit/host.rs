@@ -60,7 +60,12 @@ impl IosHost {
 impl Host for IosHost {
     fn commit_root(&mut self, vnode: &Value) {
         let (w, h) = self.content_size();
-        build_into(vnode, &self.root, w, h, &self.ctx);
+        let prev = if matches!(self.last_vnode, Value::Null) {
+            None
+        } else {
+            Some(&self.last_vnode)
+        };
+        build_into(vnode, &self.root, w, h, &self.ctx, prev);
         self.last_vnode = vnode.clone();
         let _ = &self.window;
     }
@@ -72,6 +77,15 @@ impl Host for IosHost {
         let v = self.last_vnode.clone();
         self.commit_root(&v);
     }
+}
+
+/// Root view controller for presenting alerts / sheets (after `ios.run`).
+pub fn presenting_view_controller() -> Option<Retained<UIViewController>> {
+    WINDOW.with(|slot| {
+        slot.borrow()
+            .as_ref()
+            .and_then(|(window, _)| window.rootViewController())
+    })
 }
 
 /// Create (or reuse) the key `UIWindow` and content `UIView` for the legacy root.

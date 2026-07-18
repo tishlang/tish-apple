@@ -1329,6 +1329,18 @@ fn patch_vnode(
                     Ok(pt + fh + pb)
                 }
                 "webview" => {
+                    // Bridge config is create-time only; flipping `bridge` / id forces rebuild.
+                    let old_props = effective_props(&vnode_props(om));
+                    let old_bridge = props_bool(&old_props, &["bridge"], false);
+                    let new_bridge = props_bool(&props, &["bridge"], false);
+                    if old_bridge != new_bridge {
+                        return Err(());
+                    }
+                    let old_id = props_string(&old_props, &["id", "surfaceId", "label"]);
+                    let new_id = props_string(&props, &["id", "surfaceId", "label"]);
+                    if old_id != new_id {
+                        return Err(());
+                    }
                     let v = subview(parent, *slot).ok_or(())?;
                     let wv = unsafe { as_webview(&*v).ok_or(())? };
                     let th = scroll_outer_height(&props, avail_h);
@@ -1337,6 +1349,11 @@ fn patch_vnode(
                         let req = NSURLRequest::requestWithURL(&url);
                         unsafe {
                             let _ = wv.loadRequest(&req);
+                        }
+                    }
+                    if new_bridge {
+                        if let Some(sid) = new_id {
+                            super::webview_bridge::sync_bridge_handlers(&sid, &props);
                         }
                     }
                     place(wv, ix, iy, iw, th);

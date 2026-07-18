@@ -1,8 +1,11 @@
 //! UIKit entry (`tish:ios`).
 
+pub mod host;
 mod build;
-mod host;
+mod patch;
 mod router;
+mod webview_bridge;
+mod wk_webview;
 
 use std::sync::Arc;
 
@@ -11,6 +14,8 @@ use tishlang_core::{ObjectMap, Value};
 use tishlang_ui::runtime::{
     install_host_for_root, native_create_root, LEGACY_ROOT_ID,
 };
+
+pub use webview_bridge::broadcast_event;
 
 pub fn ios_run(args: &[Value]) -> Value {
     let app_fn = match args.first() {
@@ -24,7 +29,7 @@ pub fn ios_run(args: &[Value]) -> Value {
     let root_obj = native_create_root(&[Value::Null]);
     if let Value::Object(obj) = root_obj {
         if let Some(Value::Function(render)) = obj.borrow().strings.get("render") {
-            render(&[app_fn]);
+            render.call(&[app_fn]);
         }
     }
     Value::Null
@@ -34,8 +39,32 @@ pub fn ios_object() -> Value {
     let run = Value::native(ios_run);
     let mut ios_inner = ObjectMap::default();
     ios_inner.insert(Arc::from("run"), run);
+    ios_inner.insert(
+        Arc::from("invoke"),
+        Value::native(crate::broker::native_invoke),
+    );
+    ios_inner.insert(
+        Arc::from("stateGet"),
+        Value::native(crate::broker::native_state_get),
+    );
+    ios_inner.insert(
+        Arc::from("stateSet"),
+        Value::native(crate::broker::native_state_set),
+    );
+    ios_inner.insert(
+        Arc::from("webviewEval"),
+        Value::native(webview_bridge::native_webview_eval),
+    );
+    ios_inner.insert(
+        Arc::from("webviewPostMessage"),
+        Value::native(webview_bridge::native_webview_post_message),
+    );
     let mut root = ObjectMap::default();
     root.insert(Arc::from("ios"), Value::object(ios_inner));
+    root.insert(
+        Arc::from("invoke"),
+        Value::native(crate::broker::native_invoke),
+    );
     root.insert(
         Arc::from("useState"),
         Value::native(tishlang_ui::runtime::native_use_state),

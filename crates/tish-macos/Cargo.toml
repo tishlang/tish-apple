@@ -17,9 +17,13 @@ objc2 = { version = "0.6", default-features = true }
 objc2-foundation = { version = "0.3", default-features = true, features = [
     "NSDate",
     "NSTimer",
+    "NSData",
+    "NSString",
+    "NSError",
     "block2",
 ] }
 block2 = "0.6"
+serde_json = "1"
 objc2-app-kit = { version = "0.3", default-features = true, features = [
     "objc2-quartz-core",
     "NSVisualEffectView",
@@ -44,6 +48,7 @@ objc2-quartz-core = { version = "0.3", default-features = false, features = [
 ] }
 objc2-web-kit = { version = "0.3", default-features = false, features = [
     "std",
+    "block2",
     "objc2-app-kit",
     "objc2-core-foundation",
     "WKWebView",
@@ -51,5 +56,10 @@ objc2-web-kit = { version = "0.3", default-features = false, features = [
     "WKNavigation",
     "WKNavigationDelegate",
     "WKUIDelegate",
+    "WKUserContentController",
+    "WKUserScript",
+    "WKScriptMessage",
+    "WKScriptMessageHandler",
 ] }
 dispatch2 = "0.3"
+objc2-user-notifications = { version = "0.3", default-features = true }

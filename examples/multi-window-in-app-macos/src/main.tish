@@ -1,7 +1,7 @@
 // Same process, second NSWindow via macos.openWindow(DetailApp, { title }). One Dock icon.
 // Handle includes nsWindow (per-window API) and show(). From this directory: npm install && npm run dev.
 
-import { macos, window, useState, useEffect, Window } from "tish:macos"
+import { macos, window, useState, useEffect, Window } from "@tishlang/tish-macos"
 
 const delay = 1;
 

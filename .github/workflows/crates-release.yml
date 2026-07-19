@@ -1,0 +1,185 @@
+# Publish tish-apple-common → tish-macos → tish-ios to crates.io when a GitHub
+# release is promoted from prerelease to full release. Mirrors
+# tish-desktop/.github/workflows/crates-release.yml (and tish crates-release.yml).
+#
+# Local/monorepo builds keep path deps on tishlang_* + tish_broker. This workflow
+# rewrites those for publish. Requires tish_broker on crates.io first (from
+# tishlang/tish-desktop).
+#
+# Secret: CARGO_REGISTRY_TOKEN (crates.io API token) on this repo.
+
+name: Crates.io release
+
+on:
+  release:
+    types: [published, edited]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to (re)publish, e.g. v0.1.0"
+        required: true
+        type: string
+      tishlang_core_version:
+        description: "crates.io tishlang_* train (semver req)"
+        required: false
+        default: "2.39"
+        type: string
+      tish_broker_version:
+        description: "crates.io tish_broker version (semver req)"
+        required: false
+        default: "0.1"
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish to crates.io
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false }}
+    runs-on: ubuntu-latest
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      TISHLANG_CORE_VERSION: ${{ inputs.tishlang_core_version || '2.39' }}
+      TISH_BROKER_VERSION: ${{ inputs.tish_broker_version || '0.1' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ github.event.release.tag_name || inputs.tag }}
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set versions and registry deps
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          VERSION="${TAG#v}"
+          CORE="${TISHLANG_CORE_VERSION}"
+          BROKER="${TISH_BROKER_VERSION}"
+
+          for crate_dir in tish-apple-common tish-macos tish-ios; do
+            sed -i.bak "s/^version = .*/version = \"$VERSION\"/" "crates/$crate_dir/Cargo.toml"
+            rm -f "crates/$crate_dir/Cargo.toml.bak"
+          done
+
+          # Path deps → versioned crates.io (cargo publish rejects path deps).
+          python3 <<PY
+          from pathlib import Path
+          import re
+
+          core = """${CORE}"""
+          broker = """${BROKER}"""
+          version = """${VERSION}"""
+
+          rewrites = [
+              (
+                  r'tishlang_core\s*=\s*\{\s*path\s*=\s*"[^"]+"\s*\}',
+                  f'tishlang_core = {{ version = "{core}" }}',
+              ),
+              (
+                  r'tishlang_ui\s*=\s*\{\s*path\s*=\s*"[^"]+"\s*,\s*default-features\s*=\s*false\s*,\s*features\s*=\s*\["runtime"\]\s*\}',
+                  f'tishlang_ui = {{ version = "{core}", default-features = false, features = ["runtime"] }}',
+              ),
+              (
+                  r'tishlang_runtime\s*=\s*\{\s*path\s*=\s*"[^"]+"\s*\}',
+                  f'tishlang_runtime = {{ version = "{core}" }}',
+              ),
+              (
+                  r'tish_broker\s*=\s*\{\s*path\s*=\s*"[^"]+"\s*\}',
+                  f'tish_broker = {{ version = "{broker}" }}',
+              ),
+              (
+                  r'tish-apple-common\s*=\s*\{\s*path\s*=\s*"[^"]+"\s*\}',
+                  f'tish-apple-common = {{ version = "{version}" }}',
+              ),
+          ]
+
+          for name in ("tish-apple-common", "tish-macos", "tish-ios"):
+              p = Path(f"crates/{name}/Cargo.toml")
+              text = p.read_text()
+              for pat, repl in rewrites:
+                  text = re.sub(pat, repl, text)
+              p.write_text(text)
+              print(f"--- crates/{name}/Cargo.toml (publish) ---")
+              print(p.read_text())
+          PY
+
+      - name: Publish crates (dependency order)
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          VERSION="${TAG#v}"
+          CRATES=(tish-apple-common tish-macos tish-ios)
+          UA="tish-apple-release/1.0 (https://github.com/tishlang/tish-apple)"
+
+          missing=0
+          while IFS= read -r c; do
+            printf '%s\n' "${CRATES[@]}" | grep -qx "$c" \
+              || { echo "::error::publishable crate '$c' is missing from the CRATES list in crates-release.yml"; missing=1; }
+          done < <(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.publish == null or (.publish | length > 0)) | .name')
+          [ "$missing" -eq 0 ] || { echo "Add the crate(s) above to CRATES in dependency order, then re-run."; exit 1; }
+
+          publish_with_retry() {
+            local crate="$1" max="${PUBLISH_MAX_ATTEMPTS:-6}" attempt log after tgt now wait
+            log=$(mktemp)
+            for attempt in $(seq 1 "$max"); do
+              if cargo publish -p "$crate" --token "$CARGO_REGISTRY_TOKEN" --no-verify --allow-dirty >"$log" 2>&1; then
+                cat "$log"; rm -f "$log"; return 0
+              fi
+              cat "$log"
+              if ! grep -qiE '429|too many|rate.?limit|try again (later|after)' "$log"; then
+                echo "::error::cargo publish $crate failed (not a rate limit) — see log above"
+                rm -f "$log"; return 1
+              fi
+              after=$(grep -oiE 'try again after [^.]*(GMT|UTC)' "$log" | head -1 | sed -E 's/.*try again after //I' || true)
+              wait=""
+              if [ -n "$after" ]; then
+                now=$(date -u +%s)
+                tgt=$(date -u -d "$after" +%s 2>/dev/null || echo "")
+                [ -n "$tgt" ] && wait=$(( tgt - now + 5 ))
+              fi
+              if [ -z "$wait" ] || [ "$wait" -lt 1 ]; then wait=60; fi
+              if [ "$wait" -gt 180 ]; then wait=180; fi
+              echo "::warning::$crate hit a crates.io rate limit (attempt ${attempt}/${max}); waiting ${wait}s then retrying"
+              sleep "$wait"
+            done
+            echo "::error::$crate still rate-limited after ${max} attempts. Re-dispatch (Actions → Crates.io release → Run workflow, tag=${TAG})."
+            rm -f "$log"; return 1
+          }
+
+          for crate in "${CRATES[@]}"; do
+            if curl -sSf -o /dev/null -A "$UA" "https://crates.io/api/v1/crates/${crate}/${VERSION}"; then
+              echo "Skipping $crate v${VERSION} (already published)"
+            else
+              echo "Publishing $crate v${VERSION} (tishlang_* ${TISHLANG_CORE_VERSION}, tish_broker ${TISH_BROKER_VERSION})..."
+              publish_with_retry "$crate"
+            fi
+          done
+
+      - name: Update release description with crates.io URL
+        if: github.event_name == 'release'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          VERSION="${TAG#v}"
+          CRATES_URL="https://crates.io/crates/tish-macos/${VERSION}"
+          RELEASE_ID="${{ github.event.release.id }}"
+          REPO="${{ github.repository }}"
+          CURRENT_BODY=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${REPO}/releases/${RELEASE_ID}" | jq -r '.body // ""')
+          if printf '%s' "$CURRENT_BODY" | grep -q "crates.io/crates/tish-macos"; then
+            echo "Release body already has crates.io link"
+          else
+            NEW_BODY="${CURRENT_BODY}
+
+          ---
+          Published to crates.io: ${CRATES_URL} (also tish-apple-common, tish-ios)"
+            curl -s -X PATCH \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${REPO}/releases/${RELEASE_ID}" \
+              -d "$(printf '%s' "$NEW_BODY" | jq -Rs '{body: .}')"
+          fi

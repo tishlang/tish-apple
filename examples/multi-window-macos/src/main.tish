@@ -8,7 +8,7 @@ import {
   Window,
   onSessionMessage,
   postSessionMessage,
-} from "tish:macos"
+} from "@tishlang/tish-macos"
 
 fn PeerApp() {
   let [m, setM] = useState("")

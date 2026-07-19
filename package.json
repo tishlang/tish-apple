@@ -3,7 +3,9 @@
   "private": true,
   "description": "Apple-platform UI hosts for Tish (macOS AppKit + iOS UIKit)",
   "scripts": {
-    "clean": "find . -type d \\( -name dist -o -name target -o -name node_modules -o -name .derivedData \\) -prune -print0 | xargs -0 rm -rf",
+    "clean": "find . -type d \\( -name dist -o -name dist-npm -o -name target -o -name node_modules -o -name .derivedData \\) -prune -print0 | xargs -0 rm -rf",
+    "publish:npm": "node scripts/publish-npm.mjs",
+    "publish:npm:dry": "node scripts/publish-npm.mjs --dry-run",
     "example:hello-ios": "npm --prefix examples/hello-ios install && npm --prefix examples/hello-ios run run",
     "example:hello-ios:build": "npm --prefix examples/hello-ios install && npm --prefix examples/hello-ios run build && npm --prefix examples/hello-ios run xcodebuild:sim",
     "example:hello-ios:launch": "npm --prefix examples/hello-ios run launch:sim"

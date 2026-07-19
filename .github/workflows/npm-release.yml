@@ -1,0 +1,116 @@
+# Publish @tishlang/tish-macos + @tishlang/tish-ios to npm when a GitHub release
+# is promoted from prerelease to full release. Mirrors
+# tish-desktop/.github/workflows/npm-release.yml (and tish npm-release.yml).
+#
+# Scoped names follow the npm ecosystem pattern of the other tish repos
+# (`@tishlang/tish`, `@tishlang/lattish`); consumers import
+# "@tishlang/tish-macos". The unscoped `tish:macos` spec is monorepo-local
+# debug only. Each npm tarball ships the Rust crate sources so `tish build` can
+# path-depend on `node_modules/@tishlang/tish-macos` outside the monorepo —
+# Cargo.toml path deps are rewritten to crates.io versions at publish time.
+#
+# AUTH: npm OIDC trusted publishing (no long-lived NPM_TOKEN). One-time setup on
+# npmjs.com for EACH package below — Settings → Trusted Publisher → GitHub Actions:
+#   Organization or user: tishlang
+#   Repository:           tish-apple
+#   Workflow filename:    npm-release.yml
+#   Environment:          (leave blank)
+# Requires npm >= 11.5.1 (upgraded below) and id-token: write.
+
+name: NPM release
+
+on:
+  release:
+    types: [published, edited]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to (re)publish, e.g. v0.1.0"
+        required: true
+        type: string
+      tishlang_core_version:
+        description: "crates.io tishlang_* train (semver req)"
+        required: false
+        default: "2.39"
+        type: string
+      tish_broker_version:
+        description: "crates.io tish_broker version (semver req)"
+        required: false
+        default: "0.1"
+        type: string
+
+jobs:
+  publish:
+    name: Publish @tishlang/tish-macos / @tishlang/tish-ios
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      NPM_CONFIG_PROVENANCE: "false"
+      TISHLANG_CORE_VERSION: ${{ inputs.tishlang_core_version || '2.39' }}
+      TISH_BROKER_VERSION: ${{ inputs.tish_broker_version || '0.1' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ github.event.release.tag_name || inputs.tag }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Upgrade npm for OIDC trusted publishing (needs >= 11.5.1)
+        run: |
+          # Pin to npm 11.x — same rationale as tish npm-release.yml.
+          npm install -g "npm@^11"
+          npm --version
+
+      # All staging/rewrite/publish logic lives in scripts/publish-npm.mjs —
+      # the same script used for local publishes (npm run publish:npm[:dry]).
+      - name: Publish packages
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: node scripts/publish-npm.mjs
+
+  update-release:
+    name: Update release description
+    needs: publish
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false) && github.event_name == 'release' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Update release description with npm URLs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          MACOS_URL="https://www.npmjs.com/package/@tishlang/tish-macos/v/${VERSION}"
+          IOS_URL="https://www.npmjs.com/package/@tishlang/tish-ios/v/${VERSION}"
+          CRATES_URL="https://crates.io/crates/tish-macos/${VERSION}"
+          RELEASE_ID="${{ github.event.release.id }}"
+          REPO="${{ github.repository }}"
+          CURRENT_BODY=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${REPO}/releases/${RELEASE_ID}" | jq -r '.body // ""')
+          if printf '%s' "$CURRENT_BODY" | grep -q "Published to npm:"; then
+            echo "Release body already lists npm URLs — nothing to do."
+            exit 0
+          fi
+          NEW_BODY="${CURRENT_BODY}
+
+          ---
+          Published to npm: ${MACOS_URL}
+          tish-ios: ${IOS_URL}
+          crates.io: ${CRATES_URL}"
+          curl -s -X PATCH \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${REPO}/releases/${RELEASE_ID}" \
+            -d "$(printf '%s' "$NEW_BODY" | jq -Rs '{body: .}')"

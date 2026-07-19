@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "UIKit native host for Tish JSX (tish:ios)"
 license = "MIT"
+repository = "https://github.com/tishlang/tish-apple"
 
 [dependencies]
 tish-apple-common = { path = "../tish-apple-common" }

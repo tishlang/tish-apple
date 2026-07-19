@@ -1,0 +1,117 @@
+# Release (prerelease branch + GitHub API)
+#
+# On push to main: semantic-release dry-run → create/update a GitHub prerelease.
+# Promoting that prerelease to a full release triggers npm-release.yml + crates-release.yml.
+# Mirrors tish-desktop/.github/workflows/release-prerelease.yml (and the release job in
+# tish/.github/workflows/build-npm-binaries.yml).
+
+name: Release (prerelease)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release_check:
+    name: Release check (semantic-release dry-run)
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+      published: ${{ steps.next.outputs.published }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Next version (semantic-release dry-run)
+        id: semantic
+        uses: cycjimmy/semantic-release-action@v4
+        with:
+          dry_run: true
+          semantic_version: 25
+          extra_plugins: |
+            @semantic-release/commit-analyzer@^13.0.0
+            @semantic-release/release-notes-generator@^14.1.0
+        env:
+          TISH_SEMANTIC_RELEASE_CI: "1"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Export next version
+        id: next
+        run: |
+          VERSION="${{ steps.semantic.outputs.new_release_version }}"
+          if [ -z "$VERSION" ]; then
+            echo "::notice::No version bump in these commits — skipping prerelease."
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "published=true" >> "$GITHUB_OUTPUT"
+          echo "Next version: $VERSION"
+
+  prerelease:
+    name: Create GitHub prerelease
+    needs: release_check
+    if: needs.release_check.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create or update GitHub prerelease
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.release_check.outputs.version }}
+        run: |
+          TAG="v${VERSION}"
+          BRANCH="${GITHUB_REF_NAME}"
+          BODY=$(cat <<EOF
+          ## ${TAG}
+
+          Prerelease cut by CI from \`${BRANCH}\`.
+
+          **Promote to a full release** (Releases → Edit → uncheck pre-release) to publish:
+
+          - npm: \`@tishlang/tish-macos\`, \`@tishlang/tish-ios\`
+          - crates.io: \`tish-apple-common\`, \`tish-macos\`, \`tish-ios\`
+
+          See [docs/RELEASE.md](https://github.com/tishlang/tish-apple/blob/main/docs/RELEASE.md).
+          EOF
+          )
+
+          EXISTING=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" || true)
+          REL_ID=$(echo "$EXISTING" | jq -r '.id // empty')
+
+          if [ -n "$REL_ID" ] && [ "$REL_ID" != "null" ]; then
+            curl -s -X PATCH \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/${REL_ID}" \
+              -d "$(jq -n --arg body "$BODY" --arg target "$BRANCH" \
+                '{body:$body, target_commitish:$target, prerelease:true, draft:false}')"
+            echo "Updated existing prerelease $TAG"
+          else
+            git tag -f "$TAG" "$GITHUB_SHA"
+            git push -f origin "refs/tags/$TAG"
+
+            HTTP=$(curl -s -o /tmp/rel.json -w "%{http_code}" -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases" \
+              -d "$(jq -n --arg tag "$TAG" --arg target "$BRANCH" --arg name "$TAG" --arg body "$BODY" \
+                '{tag_name:$tag, target_commitish:$target, name:$name, body:$body, prerelease:true, draft:false}')")
+            if [ "$HTTP" = "201" ] || [ "$HTTP" = "200" ]; then
+              echo "Created prerelease $TAG"
+            else
+              echo "::error::Failed to create prerelease (HTTP $HTTP)"
+              cat /tmp/rel.json
+              exit 1
+            fi
+          fi

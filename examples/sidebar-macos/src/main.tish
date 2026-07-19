@@ -1,7 +1,7 @@
 // Notes-style three-pane demo: middle `ZStack` is `GroupedTable` + `VisualEffect`; the host reparents the
 // header effect **into** the `NSScrollView` (above the clip, below the scroller) so list rows blur under frosted chrome.
 
-import { macos, window, SidebarWindow, useState, useEffect } from "tish:macos"
+import { macos, window, SidebarWindow, useState, useEffect } from "@tishlang/tish-macos"
 
 // --- Design tokens (match Notes dark sidebar references) ---
 let SIDEBAR_BG = "#1e1b26"

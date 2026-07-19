@@ -3,13 +3,14 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "tish-macos": "file:../../crates/tish-macos"
+    "@tishlang/tish": "^2.39.0",
+    "@tishlang/tish-macos": "^0.2.0"
   },
   "scripts": {
-    "build": "cargo run --manifest-path ../../../tish/Cargo.toml -q -p tishlang -- build --target native --native-backend rust src/main.tish -o dist/hello-macos",
+    "build": "tish build --target native --native-backend rust src/main.tish -o dist/hello-macos",
     "dev": "npm run build && ./dist/hello-macos",
     "run": "npm run dev",
     "start": "npm run dev"
   },
-  "description": "Sample native app: tishlang_ui JSX + tish:macos run()"
+  "description": "Sample native app: tishlang_ui JSX + macos.run() from @tishlang/tish-macos"
 }

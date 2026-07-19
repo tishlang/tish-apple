@@ -1,7 +1,7 @@
 {
   "name": "tish-ios",
   "version": "0.1.0",
-  "description": "UIKit native UI host for Tish JSX (tish:ios)",
+  "description": "UIKit native UI host for Tish JSX",
   "license": "MIT",
   "tish": {
     "module": true,

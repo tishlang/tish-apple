@@ -1,7 +1,7 @@
-// Kitchen sink: exercises `tish:macos` vnode tags + `window` API.
+// Kitchen sink: exercises `@tishlang/tish-macos` vnode tags + `window` API.
 // From this directory: `npm install` then `npm run dev`.
 
-import { macos, window, useState, useMemo } from "tish:macos"
+import { macos, window, useState, useMemo } from "@tishlang/tish-macos"
 
 // Module-level factory for `useMemo`: static intro + layout (deps `[]` → one vnode subtree cached per root).
 fn staticHeaderAndLayout() {

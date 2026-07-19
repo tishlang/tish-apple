@@ -1,7 +1,7 @@
 // AIM-style mock: main chat list, per-chat windows, Settings, native markdown, prefs, snap.
 // From this directory: npm install && npm run dev
 
-import { macos, window, useState, useEffect, Window } from "tish:macos"
+import { macos, window, useState, useEffect, Window } from "@tishlang/tish-macos"
 
 fn prefBool(key, defaultVal) {
   let s = macos.preferencesGet(key)

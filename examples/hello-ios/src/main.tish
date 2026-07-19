@@ -1,10 +1,10 @@
-// Pure-native UIKit hello — tish-apple host only (`tish:ios`).
+// Pure-native UIKit hello — tish-apple host only (`@tishlang/tish-ios`).
 // Exercises slider / tabs / text_editor (+ existing button / state).
 // No tish-desktop, no broker/webview parity demo (that lives in tish-desktop/examples/hello-ios).
 //
 // From `examples/hello-ios/`: `npm install` then `npm run run`
 
-import { ios, useState } from "tish:ios"
+import { ios, useState } from "@tishlang/tish-ios"
 
 fn App() {
   let [count, setCount] = useState(0)

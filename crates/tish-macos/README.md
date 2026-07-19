@@ -1,6 +1,6 @@
 # tish-macos
 
-AppKit host for Tish JSX (`import … from "tish:macos"`). See crate docs in `src/lib.rs` and the `examples/` tree.
+AppKit host for Tish JSX. Published to npm as **`@tishlang/tish-macos`** — apps `npm install @tishlang/tish-macos` and `import { macos } from "@tishlang/tish-macos"`. (Inside the tish monorepo only, `import … from "tish:macos"` resolves this crate directly — local debug.) See crate docs in `src/lib.rs` and the `examples/` tree.
 
 ## Editor: go to definition and hover
 

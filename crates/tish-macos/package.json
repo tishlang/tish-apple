@@ -1,7 +1,7 @@
 {
   "name": "tish-macos",
   "version": "0.1.0",
-  "description": "AppKit native UI host for Tish JSX (tish:macos)",
+  "description": "AppKit native UI host for Tish JSX",
   "license": "MIT",
   "scripts": {
     "build:hello-macos": "cargo run --manifest-path ../../../tish/Cargo.toml -q -p tishlang -- build --target native --native-backend rust examples/hello-macos/src/main.tish -o examples/hello-macos/dist/hello-macos",

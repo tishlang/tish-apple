@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "Shared tag/style/handler helpers for tish-macos and tish-ios"
 license = "MIT"
+repository = "https://github.com/tishlang/tish-apple"
 
 [dependencies]
 tishlang_core = { path = "../../../tish/crates/tish_core" }

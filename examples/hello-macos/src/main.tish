@@ -1,10 +1,9 @@
-// Native AppKit window: JSX via tishlang_ui; `import { macos } from "tish:macos"` resolves tish-macos/package.json.
+// Native AppKit window: JSX via tishlang_ui; `import { macos } from "@tishlang/tish-macos"` resolves the published npm package.
 //
 // From `examples/hello-macos/`: `npm install` then `npm run dev`
-// (or from `tish-macos/` root: `npm run dev:hello-macos` after `npm install` in the example).
 // `macos.run(App)` matches `tish-iced` / `tish-native-ui`: the host installs, then `createRoot` + `render` run in Rust.
 
-import { macos, useState } from "tish:macos"
+import { macos, useState } from "@tishlang/tish-macos"
 
 fn App() {
   let [count, setCount] = useState(0)

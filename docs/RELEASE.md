@@ -37,9 +37,29 @@ Packages:
 - `@tishlang/tish-macos`
 - `@tishlang/tish-ios`
 
-Create the packages on npm (empty publish or “Create package”) before the first OIDC publish if npm requires them to exist.
+A Trusted Publisher can only be configured for a package that already exists on npm, so the **first publish is manual** — see below.
 
-### 3. Upstream crates
+### 3. First release: manual npm bootstrap
+
+The first npm publish runs from a logged-in machine, not CI:
+
+```bash
+# 1. Get the crates onto crates.io first (consumers' builds fetch them):
+#    promote the GitHub release as usual, or Actions → Crates.io release → Run workflow with the tag.
+
+# 2. Log in as an account with publish rights to the tishlang npm org:
+npm login
+
+# 3. Stage and inspect what will ship (output in dist-npm/):
+npm run publish:npm:dry -- --version <x.y.z>
+
+# 4. Publish @tishlang/tish-macos + @tishlang/tish-ios:
+npm run publish:npm -- --version <x.y.z>
+```
+
+Then configure the Trusted Publisher for both packages (table above). From that point promotion publishes automatically; `npm-release.yml` skips any version already on npm, so re-running it after a manual publish is harmless. The version passed here should match the promoted release tag so npm and crates.io stay on the same train.
+
+### 4. Upstream crates
 
 `tish-macos` / `tish-ios` depend on **`tish_broker`** (from [tish-desktop](https://github.com/tishlang/tish-desktop)) and the **`tishlang_*`** train (from [tish](https://github.com/tishlang/tish)). Publish those first, or pass matching versions when re-dispatching the crates/npm workflows.
 

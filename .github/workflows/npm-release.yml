@@ -9,8 +9,12 @@
 # path-depend on `node_modules/@tishlang/tish-macos` outside the monorepo —
 # Cargo.toml path deps are rewritten to crates.io versions at publish time.
 #
-# AUTH: npm OIDC trusted publishing (no long-lived NPM_TOKEN). One-time setup on
-# npmjs.com for EACH package below — Settings → Trusted Publisher → GitHub Actions:
+# AUTH: npm OIDC trusted publishing (no long-lived NPM_TOKEN). A Trusted Publisher
+# can only be configured for a package that already exists, so the FIRST publish is
+# manual from a logged-in machine (docs/RELEASE.md "First release: manual npm
+# bootstrap"); this workflow skips versions already on npm, so it coexists with that.
+# One-time setup on npmjs.com for EACH package below — Settings → Trusted Publisher
+# → GitHub Actions:
 #   Organization or user: tishlang
 #   Repository:           tish-apple
 #   Workflow filename:    npm-release.yml

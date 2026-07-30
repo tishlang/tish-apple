@@ -1,5 +1,5 @@
 [package]
-name = "tish-apple-common"
+name = "tishlang_apple_common"
 version = "0.1.0"
 edition = "2021"
 description = "Shared tag/style/handler helpers for tish-macos and tish-ios"

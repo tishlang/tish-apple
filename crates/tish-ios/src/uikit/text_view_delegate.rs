@@ -4,7 +4,7 @@ use objc2::rc::Retained;
 use objc2::{define_class, msg_send, MainThreadMarker, MainThreadOnly};
 use objc2_foundation::{NSObject, NSObjectProtocol};
 use objc2_ui_kit::{UIScrollViewDelegate, UITextView, UITextViewDelegate};
-use tish_apple_common::handlers::{decode_control_tag, invoke_text_change_handler};
+use tishlang_apple_common::handlers::{decode_control_tag, invoke_text_change_handler};
 use tishlang_ui::runtime::run_with_current_root;
 
 define_class!(

@@ -12,13 +12,13 @@ use objc2_ui_kit::{
     UIButton, UIControlEvents, UIControlState, UILabel, UIScrollView, UISegmentedControl,
     UISlider, UISwitch, UITextField, UITextView, UIView,
 };
-use tish_apple_common::handlers::{
+use tishlang_apple_common::handlers::{
     decode_control_tag, register_bool_handler, register_click_handler, register_f64_handler,
     register_text_change_handler, update_bool_handler, update_click_handler, update_f64_handler,
     update_text_change_handler,
 };
-use tish_apple_common::style::{props_bool, props_f64, props_string};
-use tish_apple_common::tag::canonical_host_tag;
+use tishlang_apple_common::style::{props_bool, props_f64, props_string};
+use tishlang_apple_common::tag::canonical_host_tag;
 use tishlang_core::{PropMap, Value};
 use tishlang_ui::runtime::is_fragment_tag;
 

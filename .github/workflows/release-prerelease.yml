@@ -78,7 +78,7 @@ jobs:
           **Promote to a full release** (Releases → Edit → uncheck pre-release) to publish:
 
           - npm: \`@tishlang/tish-macos\`, \`@tishlang/tish-ios\`
-          - crates.io: \`tish-apple-common\`, \`tish-macos\`, \`tish-ios\`
+          - crates.io: \`tishlang_apple_common\`, \`tishlang_macos\`, \`tishlang_ios\`
 
           See [docs/RELEASE.md](https://github.com/tishlang/tish-apple/blob/main/docs/RELEASE.md).
           EOF

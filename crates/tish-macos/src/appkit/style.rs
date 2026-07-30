@@ -4,8 +4,8 @@ use objc2::rc::Retained;
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSColor, NSFont, NSTextAlignment, NSTextField, NSTextView, NSView};
 use objc2_core_foundation::CGFloat;
-use tish_apple_common::style::{props_bool, props_f64, props_string};
-pub(super) use tish_apple_common::style::parse_hex_color;
+use tishlang_apple_common::style::{props_bool, props_f64, props_string};
+pub(super) use tishlang_apple_common::style::parse_hex_color;
 use tishlang_core::{PropMap, Value};
 
 /// Returns true if layer-backed view styling from merged props should apply.

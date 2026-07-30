@@ -515,11 +515,11 @@ pub fn native_webview_post_message(args: &[Value]) -> Value {
 }
 
 fn props_bool_true(props: &tishlang_core::PropMap, keys: &[&str]) -> bool {
-    tish_apple_common::style::props_bool(props, keys, false)
+    tishlang_apple_common::style::props_bool(props, keys, false)
 }
 
 fn props_string(props: &tishlang_core::PropMap, keys: &[&str]) -> Option<String> {
-    tish_apple_common::style::props_string(props, keys)
+    tishlang_apple_common::style::props_string(props, keys)
 }
 
 fn prop_fn(props: &tishlang_core::PropMap, keys: &[&str]) -> Option<Value> {

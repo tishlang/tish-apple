@@ -1,4 +1,4 @@
-# Publish tish-apple-common → tish-macos → tish-ios to crates.io when a GitHub
+# Publish tishlang_apple_common → tishlang_macos → tishlang_ios to crates.io when a GitHub
 # release is promoted from prerelease to full release. Mirrors
 # tish-desktop/.github/workflows/crates-release.yml (and tish crates-release.yml).
 #
@@ -91,11 +91,14 @@ jobs:
                   f'tish_broker = {{ version = "{broker}" }}',
               ),
               (
-                  r'tish-apple-common\s*=\s*\{\s*path\s*=\s*"[^"]+"\s*\}',
-                  f'tish-apple-common = {{ version = "{version}" }}',
+                  # dep KEY is the cargo crate name (underscore); the path is the dir (hyphen).
+                  r'tishlang_apple_common\s*=\s*\{\s*path\s*=\s*"[^"]+"\s*\}',
+                  f'tishlang_apple_common = {{ version = "{version}" }}',
               ),
           ]
 
+          # NOTE: the loop var is the crate DIRECTORY (kept hyphenated for the tish:macos
+          # walk-up); the published crate NAMES are underscore (see CRATES below).
           for name in ("tish-apple-common", "tish-macos", "tish-ios"):
               p = Path(f"crates/{name}/Cargo.toml")
               text = p.read_text()
@@ -110,7 +113,9 @@ jobs:
         run: |
           TAG="${{ github.event.release.tag_name || inputs.tag }}"
           VERSION="${TAG#v}"
-          CRATES=(tish-apple-common tish-macos tish-ios)
+          # Published crate names (cargo `-p` / crates.io) are underscore, per the tish
+          # convention; the crate DIRECTORIES stay hyphenated (tish:macos walk-up).
+          CRATES=(tishlang_apple_common tishlang_macos tishlang_ios)
           UA="tish-apple-release/1.0 (https://github.com/tishlang/tish-apple)"
 
           missing=0
@@ -164,18 +169,18 @@ jobs:
         run: |
           TAG="${{ github.event.release.tag_name || inputs.tag }}"
           VERSION="${TAG#v}"
-          CRATES_URL="https://crates.io/crates/tish-macos/${VERSION}"
+          CRATES_URL="https://crates.io/crates/tishlang_macos/${VERSION}"
           RELEASE_ID="${{ github.event.release.id }}"
           REPO="${{ github.repository }}"
           CURRENT_BODY=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
             "https://api.github.com/repos/${REPO}/releases/${RELEASE_ID}" | jq -r '.body // ""')
-          if printf '%s' "$CURRENT_BODY" | grep -q "crates.io/crates/tish-macos"; then
+          if printf '%s' "$CURRENT_BODY" | grep -q "crates.io/crates/tishlang_macos"; then
             echo "Release body already has crates.io link"
           else
             NEW_BODY="${CURRENT_BODY}
 
           ---
-          Published to crates.io: ${CRATES_URL} (also tish-apple-common, tish-ios)"
+          Published to crates.io: ${CRATES_URL} (also tishlang_apple_common, tishlang_ios)"
             curl -s -X PATCH \
               -H "Authorization: Bearer $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github+json" \

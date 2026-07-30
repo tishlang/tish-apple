@@ -13,12 +13,12 @@ use objc2_ui_kit::{
     UITextBorderStyle, UITextField, UITextInputTraits, UITextView, UIView,
     UIViewAutoresizing, UIViewContentMode,
 };
-use tish_apple_common::handlers::{
+use tishlang_apple_common::handlers::{
     register_bool_handler, register_click_handler, register_f64_handler,
     register_text_change_handler,
 };
-use tish_apple_common::style::{props_bool, props_f64, props_string};
-use tish_apple_common::tag::canonical_host_tag;
+use tishlang_apple_common::style::{props_bool, props_f64, props_string};
+use tishlang_apple_common::tag::canonical_host_tag;
 use tishlang_core::{ObjectMap, PropMap, Value};
 use tishlang_ui::runtime::{is_fragment_tag, RootId};
 
@@ -180,7 +180,7 @@ pub(crate) fn measure_text_height(text: &str, width: f64, tag: Option<&str>) -> 
 }
 
 fn canvas_rgba_from_value(canvas: &Value) -> Option<(usize, usize, Vec<u8>)> {
-    if let Some((w, h, rgba)) = tish_apple_common::canvas::canvas_rgba_bytes(canvas) {
+    if let Some((w, h, rgba)) = tishlang_apple_common::canvas::canvas_rgba_bytes(canvas) {
         return Some((w as usize, h as usize, rgba));
     }
     let Value::Object(obj) = canvas else {
@@ -687,7 +687,7 @@ fn layout_vnode(
                         Value::Number(ctx.root_id as f64),
                     );
                     let scene_obj = propmap_to_object_map(&scene_props);
-                    let view = tish_apple_common::scene_host::create_scene_view(
+                    let view = tishlang_apple_common::scene_host::create_scene_view(
                         mtm,
                         iw,
                         h,
@@ -839,7 +839,7 @@ pub fn build_into(
         }
     }
     clear_subviews(root);
-    tish_apple_common::handlers::clear_all_handlers_for_root(ctx.root_id);
+    tishlang_apple_common::handlers::clear_all_handlers_for_root(ctx.root_id);
     fill_autoresizing(root);
     place(root, 0.0, 0.0, width, height);
     root.setBackgroundColor(Some(&UIColor::systemBackgroundColor()));

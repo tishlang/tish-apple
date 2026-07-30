@@ -15,7 +15,7 @@
   },
   "tish": {
     "module": true,
-    "crate": "tish-macos",
+    "crate": "tishlang_macos",
     "export": "macos_object"
   }
 }

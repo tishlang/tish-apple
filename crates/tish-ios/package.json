@@ -5,7 +5,7 @@
   "license": "MIT",
   "tish": {
     "module": true,
-    "crate": "tish-ios",
+    "crate": "tishlang_ios",
     "export": "ios_object"
   }
 }

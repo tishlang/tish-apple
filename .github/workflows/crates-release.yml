@@ -22,12 +22,12 @@ on:
       tishlang_core_version:
         description: "crates.io tishlang_* train (semver req)"
         required: false
-        default: "2.39"
+        default: "3.0"
         type: string
       tish_broker_version:
         description: "crates.io tish_broker version (semver req)"
         required: false
-        default: "0.1"
+        default: "3.0"
         type: string
 
 permissions:
@@ -40,8 +40,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      TISHLANG_CORE_VERSION: ${{ inputs.tishlang_core_version || '2.39' }}
-      TISH_BROKER_VERSION: ${{ inputs.tish_broker_version || '0.1' }}
+      TISHLANG_CORE_VERSION: ${{ inputs.tishlang_core_version || '3.0' }}
+      TISH_BROKER_VERSION: ${{ inputs.tish_broker_version || '3.0' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

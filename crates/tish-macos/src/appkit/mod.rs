@@ -53,7 +53,7 @@ use tishlang_ui::ui_h;
 
 pub use build::BuildCtx;
 
-pub(super) use tish_apple_common::tag::canonical_host_tag;
+pub(super) use tishlang_apple_common::tag::canonical_host_tag;
 
 fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
     pm.iter()

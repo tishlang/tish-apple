@@ -21,7 +21,7 @@ use objc2_app_kit::{
 use objc2_core_foundation::{CGFloat, CGPoint, CGSize};
 use objc2_foundation::{NSEdgeInsets, NSObjectProtocol, NSRect, NSString, NSURL, NSURLRequest};
 use objc2_web_kit::WKWebView;
-pub(super) use tish_apple_common::style::{props_bool, props_f64, props_string};
+pub(super) use tishlang_apple_common::style::{props_bool, props_f64, props_string};
 use super::webview_bridge;
 use tishlang_core::{ObjectMap, PropMap, Value};
 
@@ -2377,7 +2377,7 @@ mod sidebar_window_children_tests {
     use std::rc::Rc;
     use std::sync::Arc;
 
-    pub(super) use tish_apple_common::style::{props_bool, props_f64, props_string};
+    pub(super) use tishlang_apple_common::style::{props_bool, props_f64, props_string};
 use tishlang_core::{ObjectMap, PropMap, Value};
 
 fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
@@ -2431,7 +2431,7 @@ mod split_pane_vnodes_tests {
     use std::rc::Rc;
     use std::sync::Arc;
 
-    pub(super) use tish_apple_common::style::{props_bool, props_f64, props_string};
+    pub(super) use tishlang_apple_common::style::{props_bool, props_f64, props_string};
 use tishlang_core::{ObjectMap, PropMap, Value};
 
 fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
@@ -2486,7 +2486,7 @@ mod effective_props_tests {
     use std::rc::Rc;
     use std::sync::Arc;
 
-    pub(super) use tish_apple_common::style::{props_bool, props_f64, props_string};
+    pub(super) use tishlang_apple_common::style::{props_bool, props_f64, props_string};
 use tishlang_core::{ObjectMap, PropMap, Value};
 
 fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {

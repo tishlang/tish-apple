@@ -696,58 +696,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
-name = "tish-apple-common"
-version = "0.1.0"
-dependencies = [
- "objc2",
- "objc2-app-kit",
- "objc2-ui-kit",
- "tishlang_core",
- "tishlang_ui",
-]
-
-[[package]]
-name = "tish-ios"
-version = "0.1.0"
-dependencies = [
- "block2",
- "objc2",
- "objc2-core-foundation",
- "objc2-core-graphics",
- "objc2-foundation",
- "objc2-ui-kit",
- "objc2-user-notifications",
- "objc2-web-kit",
- "serde_json",
- "tish-apple-common",
- "tish_broker",
- "tishlang_core",
- "tishlang_runtime",
- "tishlang_ui",
-]
-
-[[package]]
-name = "tish-macos"
-version = "0.1.0"
-dependencies = [
- "block2",
- "dispatch2",
- "objc2",
- "objc2-app-kit",
- "objc2-core-foundation",
- "objc2-foundation",
- "objc2-quartz-core",
- "objc2-user-notifications",
- "objc2-web-kit",
- "serde_json",
- "tish-apple-common",
- "tish_broker",
- "tishlang_core",
- "tishlang_runtime",
- "tishlang_ui",
-]
-
-[[package]]
 name = "tish_broker"
 version = "0.1.0"
 dependencies = [
@@ -755,6 +703,17 @@ dependencies = [
  "parking_lot",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "tishlang_apple_common"
+version = "0.1.0"
+dependencies = [
+ "objc2",
+ "objc2-app-kit",
+ "objc2-ui-kit",
+ "tishlang_core",
+ "tishlang_ui",
 ]
 
 [[package]]
@@ -779,6 +738,47 @@ dependencies = [
  "itoa",
  "ryu",
  "smallvec",
+]
+
+[[package]]
+name = "tishlang_ios"
+version = "0.1.0"
+dependencies = [
+ "block2",
+ "objc2",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-foundation",
+ "objc2-ui-kit",
+ "objc2-user-notifications",
+ "objc2-web-kit",
+ "serde_json",
+ "tish_broker",
+ "tishlang_apple_common",
+ "tishlang_core",
+ "tishlang_runtime",
+ "tishlang_ui",
+]
+
+[[package]]
+name = "tishlang_macos"
+version = "0.1.0"
+dependencies = [
+ "block2",
+ "dispatch2",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-foundation",
+ "objc2-foundation",
+ "objc2-quartz-core",
+ "objc2-user-notifications",
+ "objc2-web-kit",
+ "serde_json",
+ "tish_broker",
+ "tishlang_apple_common",
+ "tishlang_core",
+ "tishlang_runtime",
+ "tishlang_ui",
 ]
 
 [[package]]

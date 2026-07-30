@@ -5,7 +5,7 @@ use objc2::runtime::AnyObject;
 use objc2::{define_class, msg_send, MainThreadMarker, MainThreadOnly};
 use objc2_foundation::{NSObject, NSObjectProtocol};
 use objc2_ui_kit::{UIButton, UISegmentedControl, UISlider, UISwitch, UITextField, UIView};
-use tish_apple_common::handlers::{
+use tishlang_apple_common::handlers::{
     decode_control_tag, invoke_bool_handler, invoke_click_handler, invoke_f64_handler,
     invoke_text_change_handler,
 };

@@ -39,7 +39,7 @@ thread_local! {
         RefCell::new(HashMap::new());
 }
 
-pub use tish_apple_common::handlers::{
+pub use tishlang_apple_common::handlers::{
     clear_click_handlers_for_root, decode_control_tag, encode_control_tag, invoke_click_handler,
     register_click_handler, update_click_handler,
 };

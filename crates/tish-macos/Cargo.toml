@@ -1,5 +1,5 @@
 [package]
-name = "tish-macos"
+name = "tishlang_macos"
 version = "0.1.0"
 edition = "2021"
 description = "AppKit native window + tishlang_ui Host for Tish JSX (macOS)"
@@ -7,7 +7,7 @@ license = "MIT"
 repository = "https://github.com/tishlang/tish-apple"
 
 [dependencies]
-tish-apple-common = { path = "../tish-apple-common" }
+tishlang_apple_common = { path = "../tish-apple-common" }
 tishlang_core = { path = "../../../tish/crates/tish_core" }
 tishlang_ui = { path = "../../../tish/crates/tish_ui", default-features = false, features = ["runtime"] }
 tishlang_runtime = { path = "../../../tish/crates/tish_runtime" }

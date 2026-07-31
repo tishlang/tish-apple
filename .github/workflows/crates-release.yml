@@ -2,8 +2,8 @@
 # release is promoted from prerelease to full release. Mirrors
 # tish-desktop/.github/workflows/crates-release.yml (and tish crates-release.yml).
 #
-# Local/monorepo builds keep path deps on tishlang_* + tish_broker. This workflow
-# rewrites those for publish. Requires tish_broker on crates.io first (from
+# Local/monorepo builds keep path deps on tishlang_* + tishlang_broker. This workflow
+# rewrites those for publish. Requires tishlang_broker on crates.io first (from
 # tishlang/tish-desktop).
 #
 # Secret: CARGO_REGISTRY_TOKEN (crates.io API token) on this repo.
@@ -25,9 +25,9 @@ on:
         default: "3.0"
         type: string
       tish_broker_version:
-        description: "crates.io tish_broker version (semver req)"
+        description: "crates.io tishlang_broker version (semver req)"
         required: false
-        default: "3.0"
+        default: "1.0"
         type: string
 
 permissions:
@@ -40,8 +40,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      # tishlang_* tracks the core tish train (3.x). tishlang_broker is published from
+      # tishlang/tish-desktop, which versions on its OWN line (1.x) — not the core train.
       TISHLANG_CORE_VERSION: ${{ inputs.tishlang_core_version || '3.0' }}
-      TISH_BROKER_VERSION: ${{ inputs.tish_broker_version || '3.0' }}
+      TISH_BROKER_VERSION: ${{ inputs.tish_broker_version || '1.0' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -87,8 +89,8 @@ jobs:
                   f'tishlang_runtime = {{ version = "{core}" }}',
               ),
               (
-                  r'tish_broker\s*=\s*\{\s*path\s*=\s*"[^"]+"\s*\}',
-                  f'tish_broker = {{ version = "{broker}" }}',
+                  r'tishlang_broker\s*=\s*\{\s*path\s*=\s*"[^"]+"\s*\}',
+                  f'tishlang_broker = {{ version = "{broker}" }}',
               ),
               (
                   # dep KEY is the cargo crate name (underscore); the path is the dir (hyphen).
@@ -157,7 +159,7 @@ jobs:
             if curl -sSf -o /dev/null -A "$UA" "https://crates.io/api/v1/crates/${crate}/${VERSION}"; then
               echo "Skipping $crate v${VERSION} (already published)"
             else
-              echo "Publishing $crate v${VERSION} (tishlang_* ${TISHLANG_CORE_VERSION}, tish_broker ${TISH_BROKER_VERSION})..."
+              echo "Publishing $crate v${VERSION} (tishlang_* ${TISHLANG_CORE_VERSION}, tishlang_broker ${TISH_BROKER_VERSION})..."
               publish_with_retry "$crate"
             fi
           done

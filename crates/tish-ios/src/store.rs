@@ -15,7 +15,7 @@ pub fn invoke(cmd: &str, args: &Json) -> Option<Result<Json, String>> {
     #[cfg(not(target_os = "ios"))]
     {
         let _ = args;
-        Some(Ok(tish_broker::unsupported_on("store", "ios")))
+        Some(Ok(tishlang_broker::unsupported_on("store", "ios")))
     }
 }
 
@@ -112,6 +112,6 @@ fn dispatch(cmd: &str, args: &Json) -> Result<Json, String> {
             save_map(&path, &BTreeMap::new())?;
             Ok(json!({ "ok": true }))
         }
-        _ => Ok(tish_broker::unsupported("store")),
+        _ => Ok(tishlang_broker::unsupported("store")),
     }
 }

@@ -21,7 +21,7 @@
  * Options:
  *   --version <v>   Version to publish (required; or env VERSION / TAG=v0.2.0)
  *   --core <req>    crates.io tishlang_* train        (default: 2.39, env TISHLANG_CORE_VERSION)
- *   --broker <req>  crates.io tish_broker version req (default: 0.1,  env TISH_BROKER_VERSION)
+ *   --broker <req>  crates.io tishlang_broker version req (default: 0.1,  env TISH_BROKER_VERSION)
  *   --dry-run       Stage + `npm pack` instead of publishing
  *   --only <name>   Publish a single package (tish-macos or @tishlang/tish-macos, etc.)
  *
@@ -50,8 +50,10 @@ const opt = (name) => {
 
 const tagEnv = process.env.TAG?.replace(/^v/, "");
 const version = opt("--version") ?? process.env.VERSION ?? tagEnv;
-const core = opt("--core") ?? process.env.TISHLANG_CORE_VERSION ?? "2.39";
-const broker = opt("--broker") ?? process.env.TISH_BROKER_VERSION ?? "0.1";
+// tishlang_* tracks the core tish train (3.x). tishlang_broker is published from
+// tishlang/tish-desktop, which versions on its OWN line (1.x) — not the core train.
+const core = opt("--core") ?? process.env.TISHLANG_CORE_VERSION ?? "3.0";
+const broker = opt("--broker") ?? process.env.TISH_BROKER_VERSION ?? "1.0";
 const dryRun = flag("--dry-run");
 const only = opt("--only");
 
@@ -89,8 +91,9 @@ function rewriteCargoToml(file) {
   for (const dep of ["tishlang_core", "tishlang_ui", "tishlang_runtime"]) {
     text = rewritePathDep(text, dep, core);
   }
-  text = rewritePathDep(text, "tish_broker", broker);
-  text = rewritePathDep(text, "tish-apple-common", version);
+  text = rewritePathDep(text, "tishlang_broker", broker);
+  // Crate name is underscored (tishlang_apple_common); its directory stays hyphenated.
+  text = rewritePathDep(text, "tishlang_apple_common", version);
 
   // Hard guard: a path dep left in the tarball makes the package unusable for
   // consumers (the path doesn't exist outside the monorepo). Fail, don't publish.

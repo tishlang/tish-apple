@@ -17,7 +17,7 @@ pub fn invoke(cmd: &str, args: &Json) -> Option<Result<Json, String>> {
     #[cfg(not(target_os = "ios"))]
     {
         let _ = args;
-        Some(Ok(tish_broker::unsupported_on("webview", "ios")))
+        Some(Ok(tishlang_broker::unsupported_on("webview", "ios")))
     }
 }
 
@@ -68,7 +68,7 @@ fn dispatch(cmd: &str, args: &Json) -> Result<Json, String> {
                 "html": html.is_some(),
             }))
         }
-        _ => Ok(tish_broker::unsupported("webview")),
+        _ => Ok(tishlang_broker::unsupported("webview")),
     }
 }
 

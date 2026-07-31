@@ -696,16 +696,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
-name = "tish_broker"
-version = "0.1.0"
-dependencies = [
- "once_cell",
- "parking_lot",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "tishlang_apple_common"
 version = "0.1.0"
 dependencies = [
@@ -714,6 +704,16 @@ dependencies = [
  "objc2-ui-kit",
  "tishlang_core",
  "tishlang_ui",
+]
+
+[[package]]
+name = "tishlang_broker"
+version = "0.1.0"
+dependencies = [
+ "once_cell",
+ "parking_lot",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -753,8 +753,8 @@ dependencies = [
  "objc2-user-notifications",
  "objc2-web-kit",
  "serde_json",
- "tish_broker",
  "tishlang_apple_common",
+ "tishlang_broker",
  "tishlang_core",
  "tishlang_runtime",
  "tishlang_ui",
@@ -774,8 +774,8 @@ dependencies = [
  "objc2-user-notifications",
  "objc2-web-kit",
  "serde_json",
- "tish_broker",
  "tishlang_apple_common",
+ "tishlang_broker",
  "tishlang_core",
  "tishlang_runtime",
  "tishlang_ui",

@@ -290,16 +290,16 @@ pub fn detach_bridge(webview: &WKWebView) {
 }
 
 fn register_surface(surface_id: &str) {
-    tish_broker::GLOBAL_SURFACES.register(tish_broker::SurfaceInfo {
+    tishlang_broker::GLOBAL_SURFACES.register(tishlang_broker::SurfaceInfo {
         id: surface_id.to_string(),
-        kind: tish_broker::SurfaceKind::Webview,
+        kind: tishlang_broker::SurfaceKind::Webview,
         platform: Some("ios".into()),
         label: Some(surface_id.to_string()),
     });
 }
 
 fn unregister_surface(surface_id: &str) {
-    let _ = tish_broker::GLOBAL_SURFACES.unregister(surface_id);
+    let _ = tishlang_broker::GLOBAL_SURFACES.unregister(surface_id);
 }
 
 pub fn list_ids() -> Vec<String> {

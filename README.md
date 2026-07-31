@@ -21,7 +21,7 @@ examples/
   ai-messenger-macos/
 ```
 
-Pure-native examples stay here (plan). Cross-device BrokerCore / native↔webview parity is in **tish-desktop** (`examples/hello-ios`). Hosts may path-depend on the standalone `tish_broker` crate under that umbrella — not on `tish_desktop` / the language repo.
+Pure-native examples stay here (plan). Cross-device BrokerCore / native↔webview parity is in **tish-desktop** (`examples/hello-ios`). Hosts may path-depend on the standalone `tishlang_broker` crate under that umbrella — not on `tishlang_desktop` / the language repo.
 
 ## Clean
 

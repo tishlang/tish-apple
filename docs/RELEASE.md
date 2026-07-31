@@ -61,7 +61,7 @@ Then configure the Trusted Publisher for both packages (table above). From that 
 
 ### 4. Upstream crates
 
-`tish-macos` / `tish-ios` depend on **`tish_broker`** (from [tish-desktop](https://github.com/tishlang/tish-desktop)) and the **`tishlang_*`** train (from [tish](https://github.com/tishlang/tish)). Publish those first, or pass matching versions when re-dispatching the crates/npm workflows.
+`tish-macos` / `tish-ios` depend on **`tishlang_broker`** (from [tish-desktop](https://github.com/tishlang/tish-desktop)) and the **`tishlang_*`** train (from [tish](https://github.com/tishlang/tish)). Publish those first, or pass matching versions when re-dispatching the crates/npm workflows.
 
 ---
 
@@ -137,7 +137,7 @@ Or just run any `examples/*` directory — they consume the published packages.
 
 ## Notes
 
-- **Monorepo vs registry:** local builds keep path deps on `tishlang_*` and `tish_broker`. Release workflows rewrite to crates.io versions.
+- **Monorepo vs registry:** local builds keep path deps on `tishlang_*` and `tishlang_broker`. Release workflows rewrite to crates.io versions.
 - **npm tarballs** include `Cargo.toml` + `src/` so the compiler can path-depend on `node_modules/@tishlang/tish-macos` outside this checkout.
 - **Names:** the crate `package.json` names stay unscoped (`tish-macos`, `tish-ios`) so the local-debug `tish:macos` walk-up keeps resolving; `scripts/publish-npm.mjs` rewrites them to the `@tishlang/` scope at stage time.
 - Root package `tish-apple` is `private: true` — never published.

@@ -146,6 +146,6 @@ pub fn invoke(cmd: &str, args: &Value) -> Result<Value, String> {
                 Err("notifications only available on iOS".into())
             }
         }
-        _ => Ok(tish_broker::unsupported_on("notification", "ios")),
+        _ => Ok(tishlang_broker::unsupported_on("notification", "ios")),
     }
 }

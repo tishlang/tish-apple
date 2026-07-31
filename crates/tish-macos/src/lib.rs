@@ -124,7 +124,7 @@ pub fn webview_broker_try_invoke(
     _args: &serde_json::Value,
 ) -> Option<Result<serde_json::Value, String>> {
     if cmd.starts_with("webview.") {
-        Some(Ok(tish_broker::unsupported_on("webview", "macos")))
+        Some(Ok(tishlang_broker::unsupported_on("webview", "macos")))
     } else {
         None
     }

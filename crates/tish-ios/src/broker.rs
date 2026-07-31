@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use serde_json::{json, Value as Json};
-use tish_broker::CapBackend;
+use tishlang_broker::CapBackend;
 use tishlang_core::{ObjectMap, Value};
 
 struct IosCaps;
@@ -27,7 +27,7 @@ impl CapBackend for IosCaps {
 }
 
 pub fn invoke_json(cmd: &str, args: Json) -> Result<Json, String> {
-    let result = tish_broker::invoke(cmd, args.clone(), "ios", Some(&IosCaps))?;
+    let result = tishlang_broker::invoke(cmd, args.clone(), "ios", Some(&IosCaps))?;
     maybe_broadcast_state(cmd, &args, &result);
     Ok(result)
 }
@@ -52,7 +52,7 @@ fn maybe_broadcast_state(cmd: &str, args: &Json, result: &Json) {
         .get("source")
         .and_then(|v| v.as_str())
         .unwrap_or("ios");
-    let payload = tish_broker::state_changed_payload(path, &value, revision, source);
+    let payload = tishlang_broker::state_changed_payload(path, &value, revision, source);
     #[cfg(target_os = "ios")]
     {
         crate::broadcast_event("state:changed", &json_to_value(&payload));

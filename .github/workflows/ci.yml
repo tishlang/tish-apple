@@ -12,10 +12,20 @@ on:
   push:
     branches: [main]
 
+# Supersede in-flight runs on the same ref rather than paying for both.
+# Same shape as tish's native-smoke.yml.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   rust-macos:
     name: Check Apple hosts
     runs-on: macos-15
+    timeout-minutes: 30
     # Same ring/const-eval workaround as tish-desktop's rust-macos job: GitHub's
     # Apple-Silicon runners are virtualized, `-C target-cpu=native` degrades to `generic`,
     # and ring's static-feature assertions then fail. apple-m1 is rustc's own default for
@@ -30,6 +40,16 @@ jobs:
         with:
           toolchain: "1.94.0"
           components: rustfmt
+
+      # rust-cache, not sccache. Nothing here runs `tish build --native-backend rust` today,
+      # but tish's http-perf.yml / native-smoke.yml both document sccache flaking that nested
+      # compile, and tish_build_utils strips RUSTC_WRAPPER anyway — so the ecosystem
+      # convention is rust-cache, and staying on it keeps this job safe if an example build
+      # is added later.
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          cache-workspace-crates: "true"
 
       # crates/tish-{macos,ios} path-depend on ../../../tish (tishlang_core/_ui/_runtime)
       # and ../../../tish-desktop (tishlang_broker) — SIBLINGS of $GITHUB_WORKSPACE, which

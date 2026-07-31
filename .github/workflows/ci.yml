@@ -1,0 +1,101 @@
+# CI for tish-apple. Mirrors tishlang/tish-desktop's ci.yml: compile-check every host
+# crate on a real Apple runner, then prove the npm publish path still stages cleanly.
+#
+# Everything here needs macOS — tishlang_macos is AppKit and tishlang_ios is UIKit, and
+# both link objc2, which is a hard `compile_error!` off Apple targets. There is no Linux
+# job to add.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  rust-macos:
+    name: Check Apple hosts
+    runs-on: macos-15
+    # Same ring/const-eval workaround as tish-desktop's rust-macos job: GitHub's
+    # Apple-Silicon runners are virtualized, `-C target-cpu=native` degrades to `generic`,
+    # and ring's static-feature assertions then fail. apple-m1 is rustc's own default for
+    # this target, so the pin is a no-op on real hardware.
+    env:
+      RUSTFLAGS: "-C target-cpu=apple-m1"
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned to the toolchain the ecosystem develops against (matches tish-desktop).
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.0"
+          components: rustfmt
+
+      # crates/tish-{macos,ios} path-depend on ../../../tish (tishlang_core/_ui/_runtime)
+      # and ../../../tish-desktop (tishlang_broker) — SIBLINGS of $GITHUB_WORKSPACE, which
+      # actions/checkout refuses to write to. Clone the public sources directly.
+      #
+      # Prefer a sibling branch with the SAME name as this PR's head branch. A change that
+      # spans repos (a crate rename, an ABI bump) otherwise deadlocks: this PR needs the
+      # sibling's matching branch and the sibling's PR needs this one. Ordinary PRs have no
+      # matching branch and fall back to the default.
+      - name: Checkout path-dep siblings (tish, tish-desktop)
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          clone_sibling() {
+            repo="$1"
+            url="https://github.com/tishlang/$repo.git"
+            if [ -n "${HEAD_REF:-}" ] && git ls-remote --exit-code --heads "$url" "$HEAD_REF" >/dev/null 2>&1; then
+              echo ">> $repo: coordinated branch $HEAD_REF"
+              git clone --depth 1 --branch "$HEAD_REF" "$url" "../$repo"
+            else
+              echo ">> $repo: default branch"
+              git clone --depth 1 "$url" "../$repo"
+            fi
+          }
+          clone_sibling tish
+          clone_sibling tish-desktop
+
+      - name: Stub absent platform siblings (tish-ms / tish-lin / tish-android)
+        # tishlang_broker lives in tish-desktop's workspace, so Cargo reads that workspace's
+        # manifests — including tishlang_desktop's optional path deps on platform hosts that
+        # have no public repo yet. Stub them so resolution succeeds; their features stay OFF,
+        # so the stubs never compile. Same treatment as tish-desktop's own CI.
+        run: |
+          set -euo pipefail
+          for c in tish-ms tish-lin tish-android; do
+            d="../$c/crates/$c"
+            if [ ! -f "$d/Cargo.toml" ]; then
+              mkdir -p "$d/src"
+              printf '[package]\nname = "%s"\nversion = "0.0.0"\nedition = "2021"\n' "$c" > "$d/Cargo.toml"
+              : > "$d/src/lib.rs"
+            fi
+          done
+
+      - name: Check every publishable host crate
+        run: cargo check -p tishlang_apple_common -p tishlang_macos -p tishlang_ios
+
+      - name: Format check
+        # Style, not correctness — with no pinned rustfmt the runners drift against local.
+        # Report it, don't gate on it (same call as tish-desktop / dune-ide).
+        run: cargo fmt --check || echo "::warning::rustfmt drift (non-blocking) — run 'cargo fmt'"
+
+  npm-publish-dry-run:
+    name: npm publish staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Stages both packages exactly as a real release would and runs `npm pack`, without
+      # publishing. This is the check that catches a broken Cargo.toml rewrite: the staging
+      # script hard-fails on any path dep it did not rewrite to a version, which is what
+      # made the tarball unusable outside the monorepo after the tishlang_* crate rename.
+      # No sibling checkouts needed — staging only rewrites manifests, it never builds.
+      - name: Stage + pack @tishlang/tish-macos and @tishlang/tish-ios
+        run: node scripts/publish-npm.mjs --version 0.0.0 --dry-run

@@ -94,8 +94,15 @@ jobs:
               ),
               (
                   # dep KEY is the cargo crate name (underscore); the path is the dir (hyphen).
-                  r'tishlang_apple_common\s*=\s*\{\s*path\s*=\s*"[^"]+"\s*\}',
-                  f'tishlang_apple_common = {{ version = "{version}" }}',
+                  # Intra-workspace: keep the path AND add the version. Cargo resolves locally
+                  # through the path and emits only the version into the published .crate.
+                  # Stripping the path makes the workspace unresolvable on the FIRST publish,
+                  # because the version referenced is the one this run is uploading:
+                  #   error: no matching package named `tishlang_apple_common` found
+                  # (Contrast tishlang_core / _ui / _runtime / _broker above: those are
+                  # cross-repo, already on crates.io, and their paths do not exist here.)
+                  r'tishlang_apple_common\s*=\s*\{\s*path\s*=\s*"([^"]+)"\s*\}',
+                  lambda m: f'tishlang_apple_common = {{ path = "{m.group(1)}", version = "{version}" }}',
               ),
           ]
 

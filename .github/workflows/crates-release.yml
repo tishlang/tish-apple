@@ -162,13 +162,43 @@ jobs:
             rm -f "$log"; return 1
           }
 
+          # Cross-repo ordering gate. The CRATES array above orders THIS workspace, the way
+          # tish's crates-release.yml orders its own — but this ecosystem's graph spans two
+          # repos and interleaves:
+          #
+          #   tishlang_broker (tish-desktop) -> tishlang_macos/_ios (here)
+          #                                  -> tishlang_desktop, tishlang_app (tish-desktop)
+          #
+          # tishlang_apple_common publishes immediately (it needs only tishlang_core, already on
+          # crates.io), but the two hosts depend on tishlang_broker. Wait for it rather than
+          # failing with a bare "no matching package named `tishlang_broker` found" — which is
+          # exactly how v1.0.1 and v1.0.2 died. Same spirit as the drift guard above: make the
+          # ordering explicit and enforced instead of tribal knowledge.
+          require_published() {
+            local dep="$1" for_crate="$2" max="${CROSS_REPO_WAIT_SECS:-1800}" waited=0
+            while ! curl -sf -o /dev/null -A "$UA" "https://crates.io/api/v1/crates/${dep}"; do
+              if [ "$waited" -ge "$max" ]; then
+                echo "::error::${for_crate} needs ${dep} on crates.io and it has not appeared after ${max}s. Run tishlang/tish-desktop's Crates.io release, then re-dispatch this workflow with tag=${TAG} — already-published crates are skipped, so it resumes at ${for_crate}."
+                return 1
+              fi
+              echo "::notice::waiting for ${dep} on crates.io before publishing ${for_crate} (${waited}s/${max}s) — this is tishlang/tish-desktop's Crates.io release"
+              sleep 30
+              waited=$(( waited + 30 ))
+            done
+            echo "${dep} is on crates.io — continuing with ${for_crate}"
+          }
+
           for crate in "${CRATES[@]}"; do
             if curl -sSf -o /dev/null -A "$UA" "https://crates.io/api/v1/crates/${crate}/${VERSION}"; then
               echo "Skipping $crate v${VERSION} (already published)"
-            else
-              echo "Publishing $crate v${VERSION} (tishlang_* ${TISHLANG_CORE_VERSION}, tishlang_broker ${TISH_BROKER_VERSION})..."
-              publish_with_retry "$crate"
+              continue
             fi
+            # Gate on the sibling repo's crate before the ones that need it.
+            case "$crate" in
+              tishlang_macos|tishlang_ios) require_published tishlang_broker "$crate" || exit 1 ;;
+            esac
+            echo "Publishing $crate v${VERSION} (tishlang_* ${TISHLANG_CORE_VERSION}, tishlang_broker ${TISH_BROKER_VERSION})..."
+            publish_with_retry "$crate"
           done
 
       - name: Update release description with crates.io URL

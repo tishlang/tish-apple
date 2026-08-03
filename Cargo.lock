@@ -708,7 +708,9 @@ dependencies = [
 
 [[package]]
 name = "tishlang_broker"
-version = "0.1.0"
+version = "1.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ddff74519375e2bbb9f1d381d24a9d1513ba96aa2ac18d9db98bd1691b186721"
 dependencies = [
  "once_cell",
  "parking_lot",

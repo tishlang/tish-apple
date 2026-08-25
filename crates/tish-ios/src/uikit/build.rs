@@ -165,18 +165,14 @@ fn default_text_height(tag: Option<&str>) -> f64 {
     }
 }
 
-pub(crate) fn measure_text_height(text: &str, width: f64, tag: Option<&str>) -> f64 {
+/// Wrapped height of an already-styled, text-bearing label at `width`. Real
+/// UIKit measurement (`sizeThatFits`) — the old chars-per-line estimate
+/// undershot by ~20% (18px/line vs the real 20.3px at 17pt) and clipped
+/// multi-line `<p>` text to a single visible line.
+pub(crate) fn measure_label_height(label: &UILabel, width: f64, tag: Option<&str>) -> f64 {
     let min = default_text_height(tag);
-    if text.is_empty() {
-        return min;
-    }
-    let line_h = match tag {
-        Some("h1") => 28.0,
-        _ => 18.0,
-    };
-    let chars_per_line = (width / 8.0).max(24.0);
-    let lines = (text.len() as f64 / chars_per_line).ceil().max(1.0);
-    (lines * line_h).max(min)
+    let fitted = label.sizeThatFits(CGSize::new(width, 100_000.0));
+    (fitted.height as f64).ceil().max(min)
 }
 
 fn canvas_rgba_from_value(canvas: &Value) -> Option<(usize, usize, Vec<u8>)> {
@@ -429,7 +425,7 @@ fn layout_vnode(
             let label = UILabel::new(mtm);
             label.setText(Some(&NSString::from_str(t)));
             style_label(&label, None);
-            let h = measure_text_height(t, avail_w, None);
+            let h = measure_label_height(&label, avail_w, None);
             place(&label, x, y, avail_w, h);
             freeze_autoresizing(&label);
             parent.addSubview(&label);
@@ -683,7 +679,7 @@ fn layout_vnode(
                     let label = UILabel::new(mtm);
                     label.setText(Some(&NSString::from_str(&text)));
                     style_label(&label, Some(raw_tag));
-                    let h = props_f64(&props, &["height", "h"], measure_text_height(&text, iw, Some(raw_tag)));
+                    let h = props_f64(&props, &["height", "h"], measure_label_height(&label, iw, Some(raw_tag)));
                     place(&label, ix, iy, iw, h);
                     freeze_autoresizing(&label);
                     parent.addSubview(&label);

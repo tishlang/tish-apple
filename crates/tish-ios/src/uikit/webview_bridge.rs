@@ -204,6 +204,52 @@ fn reply_invoke(surface_id: &str, id: &str, ok: bool, value: &Value) {
     let _ = evaluate_js(surface_id, &js);
 }
 
+/// App-shell scroll policy: the workbench page lays itself out `position:fixed`
+/// against the visual viewport, so WKWebView's own UIScrollView must never move —
+/// otherwise an edge drag scrolls/bounces the entire fixed page (CSS cannot
+/// disable the native scroll view). The page's internal panes keep scrolling;
+/// this only pins the document itself.
+fn disable_native_scroll(wv: &WKWebView) {
+    unsafe {
+        let scroll: Retained<AnyObject> = msg_send![wv, scrollView];
+        let _: () = msg_send![&*scroll, setScrollEnabled: false];
+        let _: () = msg_send![&*scroll, setBounces: false];
+        // UIScrollViewContentInsetAdjustmentNever = 2: the page handles safe areas
+        // itself via env(safe-area-inset-*); double-insetting shifts the layout.
+        let _: () = msg_send![&*scroll, setContentInsetAdjustmentBehavior: 2i64];
+        // App-shell paint: an OPAQUE WKWebView flashes solid white between load
+        // and first CSS paint. Non-opaque + no background lets the host window's
+        // (dark) color show through instead, killing the launch white-flash.
+        let _: () = msg_send![wv, setOpaque: false];
+        let nil_color: *mut AnyObject = core::ptr::null_mut();
+        let _: () = msg_send![wv, setBackgroundColor: nil_color];
+        let _: () = msg_send![&*scroll, setBackgroundColor: nil_color];
+        // UIScrollViewKeyboardDismissModeInteractive = 2: drag-down dismisses the
+        // keyboard like Messages — the workbench terminal/editor relies on it.
+        let _: () = msg_send![&*scroll, setKeyboardDismissMode: 2i64];
+        let _: () = msg_send![&*scroll, setShowsHorizontalScrollIndicator: false];
+        // Safari Web Inspector attach (iOS 16.4+; no-op guard on older).
+        let sel = objc2::sel!(setInspectable:);
+        let responds: bool = msg_send![wv, respondsToSelector: sel];
+        if responds {
+            let _: () = msg_send![wv, setInspectable: true];
+        }
+    }
+}
+
+/// App-shell placement: pin the webview edge-to-edge over `parent` (the page owns
+/// safe areas via CSS). Frame-based with flexible autoresizing so rotation and
+/// window resizes track without Auto Layout — call before `addSubview`.
+pub fn pin_webview_full_bleed(wv: &WKWebView, parent: &objc2_ui_kit::UIView) {
+    unsafe {
+        let bounds: CGRect = msg_send![parent, bounds];
+        let _: () = msg_send![wv, setFrame: bounds];
+        let _: () = msg_send![wv, setTranslatesAutoresizingMaskIntoConstraints: true];
+        // UIViewAutoresizingFlexibleWidth (1<<1) | FlexibleHeight (1<<4)
+        let _: () = msg_send![wv, setAutoresizingMask: 18usize];
+    }
+}
+
 pub fn create_webview(
     mtm: MainThreadMarker,
     root_id: RootId,
@@ -215,7 +261,9 @@ pub fn create_webview(
         .unwrap_or_else(|| format!("wk-{root_id}"));
 
     if !bridge {
-        return unsafe { WKWebView::initWithFrame(WKWebView::alloc(mtm), frame) };
+        let wv = unsafe { WKWebView::initWithFrame(WKWebView::alloc(mtm), frame) };
+        disable_native_scroll(&wv);
+        return wv;
     }
 
     let config = unsafe { WKWebViewConfiguration::new(mtm) };
@@ -246,6 +294,7 @@ pub fn create_webview(
     let wv = unsafe {
         WKWebView::initWithFrame_configuration(WKWebView::alloc(mtm), frame, &config)
     };
+    disable_native_scroll(&wv);
 
     let on_invoke = prop_invoke_handler(props);
     let on_emit = prop_emit_handler(props);

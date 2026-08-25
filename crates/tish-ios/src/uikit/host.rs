@@ -5,9 +5,10 @@ use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use block2::RcBlock;
-use objc2_foundation::NSTimer;
+use objc2_foundation::{NSString, NSTimer};
 use objc2::rc::Retained;
-use objc2::{MainThreadMarker, MainThreadOnly};
+use objc2::runtime::AnyObject;
+use objc2::{class, define_class, msg_send, MainThreadMarker, MainThreadOnly};
 use objc2_ui_kit::{UIWindow, UIScreen, UIView, UIViewAutoresizing, UIViewController};
 use tishlang_core::Value;
 use tishlang_ui::runtime::{Host, RootId};
@@ -91,6 +92,42 @@ pub fn presenting_view_controller() -> Option<Retained<UIViewController>> {
     })
 }
 
+/// NSNotification posted (object: nil) whenever the user shakes the device.
+/// App shells (Swift or tish) observe this for Expo-style debug menus — the
+/// window subclass below is the ONLY supported shake hook; swizzling
+/// `UIWindow.motionEnded` crashes because stock UIWindow never overrides it.
+pub const SHAKE_NOTIFICATION: &str = "TishShakeNotification";
+
+define_class!(
+    #[unsafe(super(UIWindow))]
+    #[thread_kind = MainThreadOnly]
+    #[name = "TishShakeWindow"]
+    pub struct TishShakeWindow;
+
+    impl TishShakeWindow {
+        // motion: UIEventSubtype (motionShake = 1)
+        #[unsafe(method(motionEnded:withEvent:))]
+        fn motion_ended(&self, motion: isize, event: *mut AnyObject) {
+            if motion == 1 {
+                unsafe {
+                    let name = NSString::from_str(SHAKE_NOTIFICATION);
+                    let center: Retained<AnyObject> =
+                        msg_send![class!(NSNotificationCenter), defaultCenter];
+                    let nil_obj: *mut AnyObject = core::ptr::null_mut();
+                    let _: () =
+                        msg_send![&*center, postNotificationName: &*name, object: nil_obj];
+                }
+            }
+            let _: () = unsafe { msg_send![super(self), motionEnded: motion, withEvent: event] };
+        }
+
+        #[unsafe(method(canBecomeFirstResponder))]
+        fn can_become_first_responder(&self) -> bool {
+            true
+        }
+    }
+);
+
 /// Create (or reuse) the key `UIWindow` and content `UIView` for the legacy root.
 pub fn ensure_ios_window(mtm: MainThreadMarker) -> (Retained<UIWindow>, Retained<UIView>) {
     WINDOW.with(|slot| {
@@ -99,9 +136,11 @@ pub fn ensure_ios_window(mtm: MainThreadMarker) -> (Retained<UIWindow>, Retained
         }
 
         let bounds = UIScreen::mainScreen(mtm).bounds();
-        let window = {
-            let allocated = UIWindow::alloc(mtm);
-            UIWindow::initWithFrame(allocated, bounds)
+        let window: Retained<UIWindow> = {
+            let allocated = TishShakeWindow::alloc(mtm);
+            let w: Retained<TishShakeWindow> =
+                unsafe { msg_send![allocated, initWithFrame: bounds] };
+            Retained::into_super(w)
         };
         let vc = UIViewController::new(mtm);
         let root = UIView::new(mtm);

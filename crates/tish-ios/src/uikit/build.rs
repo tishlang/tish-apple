@@ -663,9 +663,19 @@ fn layout_vnode(
                     let frame = CGRect::new(CGPoint::ZERO, CGSize::new(iw, th));
                     let wv = webview_bridge::create_webview(ctx.mtm, ctx.root_id, frame, &props);
                     load_webview_content(&wv, html.as_deref(), &src);
-                    place(&*wv, ix, iy, iw, th);
-                    freeze_autoresizing(&*wv);
-                    parent.addSubview(&*wv);
+                    // shell: the webview IS the app UI — pin it edge-to-edge over the
+                    // whole window (the page owns safe areas via CSS) instead of
+                    // flowing it through the inset native layout. This is the mode a
+                    // WKWebView app-shell (Dune-style) uses; layout-flow placement
+                    // stays the default for embedded webviews.
+                    if props_bool(&props, &["shell"], false) {
+                        webview_bridge::pin_webview_full_bleed(&wv, parent);
+                        parent.addSubview(&*wv);
+                    } else {
+                        place(&*wv, ix, iy, iw, th);
+                        freeze_autoresizing(&*wv);
+                        parent.addSubview(&*wv);
+                    }
                     pt + th + pb
                 }
                 "text" => {

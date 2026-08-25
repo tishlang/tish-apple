@@ -23,7 +23,7 @@ use tishlang_core::{PropMap, Value};
 use tishlang_ui::runtime::is_fragment_tag;
 
 use super::build::{
-    collect_element_vnodes, freeze_autoresizing, measure_text_height, padding_insets, place,
+    collect_element_vnodes, freeze_autoresizing, measure_label_height, padding_insets, place,
     root_content_insets, scroll_outer_height, style_label, text_from_children, vnode_children,
     vnode_props, BuildCtx,
 };
@@ -371,7 +371,7 @@ fn patch_vnode(
                 label.setText(Some(&NSString::from_str(t)));
             }
             style_label(label, None);
-            let h = measure_text_height(t, avail_w, None);
+            let h = measure_label_height(label, avail_w, None);
             place(&*v, x, y, avail_w, h);
             freeze_autoresizing(&*v);
             *slot += 1;
@@ -736,7 +736,7 @@ fn patch_vnode(
                     let h = props_f64(
                         &props,
                         &["height", "h"],
-                        measure_text_height(&text, iw, Some(raw_tag)),
+                        measure_label_height(label, iw, Some(raw_tag)),
                     );
                     place(label, ix, iy, iw, h);
                     freeze_autoresizing(label);

@@ -120,11 +120,11 @@ define_class!(
             }
             let _: () = unsafe { msg_send![super(self), motionEnded: motion, withEvent: event] };
         }
-
-        #[unsafe(method(canBecomeFirstResponder))]
-        fn can_become_first_responder(&self) -> bool {
-            true
-        }
+        // NOTE: no canBecomeFirstResponder override. Shake events fall back up the
+        // responder chain to the window on their own, and a window that claims
+        // first-responder fights WKContentView's keyboard focus — the whole app
+        // window stopped compositing (black screen) the moment the iOS keyboard
+        // came up while the override was present.
     }
 );
 

@@ -713,8 +713,14 @@ fn patch_vnode(
                         return Err(());
                     }
                     let th = scroll_outer_height(&props, avail_h);
-                    place(&*v, ix, iy, iw, th);
-                    freeze_autoresizing(&*v);
+                    // shell: pinned edge-to-edge at build time — a keyboard toggle
+                    // (or any state change) re-runs this patch, and re-placing the
+                    // webview through the inset layout flow yanked it out of its
+                    // full-bleed frame (screen went black behind it).
+                    if !props_bool(&props, &["shell"], false) {
+                        place(&*v, ix, iy, iw, th);
+                        freeze_autoresizing(&*v);
+                    }
                     *slot += 1;
                     Ok(pt + th + pb)
                 }

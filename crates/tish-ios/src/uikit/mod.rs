@@ -2,6 +2,7 @@
 
 pub mod host;
 mod build;
+mod overlay_browser;
 mod patch;
 mod router;
 mod text_view_delegate;

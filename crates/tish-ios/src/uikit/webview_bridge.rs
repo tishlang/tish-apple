@@ -313,6 +313,13 @@ pub fn create_webview(
     });
     register_surface(&sid);
 
+    // App shells get the native overlay-browser channel ("tishBrowser"): a
+    // second top-level WKWebView the page positions over its browser panel —
+    // immune to X-Frame-Options, which no <iframe> inside this webview can be.
+    if props_bool_true(props, &["shell"]) {
+        super::overlay_browser::install_overlay_browser(mtm, &ucc, &wv);
+    }
+
     wv
 }
 

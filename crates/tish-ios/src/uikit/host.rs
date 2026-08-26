@@ -142,6 +142,14 @@ pub fn ensure_ios_window(mtm: MainThreadMarker) -> (Retained<UIWindow>, Retained
                 unsafe { msg_send![allocated, initWithFrame: bounds] };
             Retained::into_super(w)
         };
+        // iOS runs modern apps scene-based even without a scene manifest. A
+        // window with `windowScene == nil` renders at first but its compositing
+        // can permanently wedge (black screen) across scene activation
+        // transitions — OAuth deep-link returns, app switches, keyboard focus.
+        // Adopt the window into the first connected UIWindowScene; shells that
+        // launch from a scene delegate get a scene here, legacy launches where
+        // no scene exists yet keep working (and should re-call after connect).
+        attach_window_to_scene(&window);
         let vc = UIViewController::new(mtm);
         let root = UIView::new(mtm);
         root.setFrame(bounds);
@@ -154,6 +162,41 @@ pub fn ensure_ios_window(mtm: MainThreadMarker) -> (Retained<UIWindow>, Retained
         *slot.borrow_mut() = Some((pair.0.clone(), pair.1.clone()));
         pair
     })
+}
+
+/// Attach a scene-less window to the first connected `UIWindowScene` (no-op when
+/// none is connected yet, or the window already has one). Public so app shells
+/// can re-run it from `scene(_:willConnectTo:)` / `sceneDidBecomeActive`.
+pub fn attach_window_to_scene(window: &UIWindow) {
+    unsafe {
+        let existing: *mut AnyObject = msg_send![window, windowScene];
+        if !existing.is_null() {
+            return;
+        }
+        let app: Retained<AnyObject> = msg_send![class!(UIApplication), sharedApplication];
+        let scenes: Retained<AnyObject> = msg_send![&*app, connectedScenes];
+        let all: Retained<AnyObject> = msg_send![&*scenes, allObjects];
+        let n: usize = msg_send![&*all, count];
+        for i in 0..n {
+            let sc: Retained<AnyObject> = msg_send![&*all, objectAtIndex: i];
+            let is_window_scene: bool =
+                msg_send![&*sc, isKindOfClass: objc2::class!(UIWindowScene)];
+            if is_window_scene {
+                let _: () = msg_send![window, setWindowScene: &*sc];
+                return;
+            }
+        }
+    }
+}
+
+/// Re-run scene adoption for the runtime's window (see `attach_window_to_scene`).
+/// Safe to call any time from the main thread.
+pub fn adopt_scene_for_runtime_window() {
+    WINDOW.with(|slot| {
+        if let Some((window, _)) = slot.borrow().as_ref() {
+            attach_window_to_scene(window);
+        }
+    });
 }
 
 /// Pump `setTimeout` / `setInterval` on the main run loop so async work can yield between UI updates.

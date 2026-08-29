@@ -19,6 +19,20 @@ use tishlang_ui::runtime::{
 
 pub use webview_bridge::broadcast_event;
 
+/// C export for app shells (Swift `@_silgen_name`): re-run scene adoption for the
+/// runtime's window. `ensure_ios_window` attaches at creation, but a window made
+/// during `scene(_:willConnectTo:)` can run before the scene is published to
+/// `UIApplication.connectedScenes` — and on iOS 26 a scene-less window neither
+/// composites nor appears in `UIApplication.windows`, so the shell cannot find it
+/// to adopt it itself. Call after launch and from `sceneDidBecomeActive`.
+#[no_mangle]
+pub extern "C" fn tish_ios_adopt_scene() {
+    if objc2::MainThreadMarker::new().is_none() {
+        return;
+    }
+    host::adopt_scene_for_runtime_window();
+}
+
 pub fn ios_run(args: &[Value]) -> Value {
     let app_fn = match args.first() {
         Some(f) => f.clone(),

@@ -50,8 +50,8 @@ use super::router::MacosControlRouter;
 use super::toolbar_delegate::ToolbarEntry;
 use super::style::{
     apply_layer_style_to_view, apply_nstext_view_document_background_from_props,
-    apply_static_label_text_field, has_container_layer_style, resolve_ns_color,
-    single_line_label_height_after_style,
+    apply_static_label_text_field, apply_text_input_chrome, has_container_layer_style, resolve_ns_color,
+    single_line_label_height_after_style, text_input_height,
 };
 use super::canonical_host_tag;
 use super::text_delegate::TextFieldDelegate;
@@ -1596,6 +1596,7 @@ pub fn commit_vnode(
                     ));
                     tf.setBezeled(true);
                     tf.setEditable(true);
+                    apply_text_input_chrome(&tf, &props, ctx.mtm);
                     if let Some(Value::Function(f)) =
                         props.get("onChange").or_else(|| props.get("onInput"))
                     {
@@ -1613,7 +1614,7 @@ pub fn commit_vnode(
                             )));
                         }
                     }
-                    let h = 24.0;
+                    let h = text_input_height(&tf, &props);
                     place(&tf, ix, iy, iw, h);
                     freeze_autoresizing_for_manual_frames(&tf);
                     parent.addSubview(&tf);

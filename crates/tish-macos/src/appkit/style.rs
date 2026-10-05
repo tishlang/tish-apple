@@ -2,7 +2,8 @@
 
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
-use objc2_app_kit::{NSColor, NSFont, NSTextAlignment, NSTextField, NSTextView, NSView};
+use objc2_app_kit::{NSColor, NSFocusRingType, NSFont, NSTextAlignment, NSTextField, NSTextView, NSView};
+use objc2_foundation::NSString;
 use objc2_core_foundation::CGFloat;
 use tishlang_apple_common::style::{props_bool, props_f64, props_string};
 pub(super) use tishlang_apple_common::style::parse_hex_color;
@@ -178,6 +179,39 @@ pub(super) fn apply_text_style(tf: &NSTextField, props: &PropMap, mtm: MainThrea
         tf.setAlignment(al);
     }
     let _ = mtm;
+}
+
+/// Editable `<textinput>` chrome: `bezeled={false}` gives a plain field (no border, background or
+/// focus ring), plus `fontSize` / `fontWeight` / `color` / `textAlign` and `placeholder`.
+pub(super) fn apply_text_input_chrome(tf: &NSTextField, props: &PropMap, mtm: MainThreadMarker) {
+    let bezeled = super::build::props_opt_bool(props, &["bezeled", "bordered"]).unwrap_or(true);
+    if tf.isBezeled() != bezeled {
+        tf.setBezeled(bezeled);
+        tf.setBordered(bezeled);
+        tf.setDrawsBackground(bezeled);
+        tf.setFocusRingType(if bezeled { NSFocusRingType::Default } else { NSFocusRingType::None });
+    }
+    apply_text_style(tf, props, mtm);
+    let want = props_string(props, &["placeholder"]).unwrap_or_default();
+    let cur = tf.placeholderString().map(|s| s.to_string()).unwrap_or_default();
+    if cur != want {
+        let s = NSString::from_str(&want);
+        tf.setPlaceholderString(if want.is_empty() { None } else { Some(&s) });
+    }
+}
+
+/// Frame height for a `<textinput>`: `height` when given, else one line of its font plus the
+/// bezel (24 for the default font).
+pub(super) fn text_input_height(tf: &NSTextField, props: &PropMap) -> f64 {
+    if let Some(h) = explicit_label_height_from_props(props) {
+        return h;
+    }
+    let line = tf.font().map(|f| ns_font_line_height(&f)).unwrap_or(16.0);
+    if tf.isBezeled() {
+        (line + 8.0).max(24.0)
+    } else {
+        line + 2.0
+    }
 }
 
 /// Typographic line height (ascender − descender + leading). Matches a single text line’s bounds.

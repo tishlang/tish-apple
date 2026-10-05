@@ -74,6 +74,7 @@ pub(crate) const ROW_PROP_ALLOWLIST: &[&str] = &[
     "width",
     "w",
     "backgroundColor",
+    "hoverBackgroundColor",
     "background",
     "borderRadius",
     "opacity",

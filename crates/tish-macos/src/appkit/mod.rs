@@ -11,6 +11,7 @@ mod deferred_host;
 mod style;
 mod flipped;
 mod handlers;
+mod hover;
 mod window_delegate;
 mod patch;
 mod router;

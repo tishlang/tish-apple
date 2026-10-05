@@ -1365,7 +1365,8 @@ pub fn commit_vnode(
                             align,
                         );
                         if click_overlay {
-                            let overlay = NSButton::new(ctx.mtm);
+                            let overlay: Retained<NSButton> =
+                                Retained::into_super(super::hover::HoverButton::new(ctx.mtm));
                             overlay.setTitle(&NSString::from_str("\u{200b}"));
                             overlay.setBezelStyle(NSBezelStyle::AccessoryBarAction);
                             overlay.setBordered(false);
@@ -1376,6 +1377,7 @@ pub fn commit_vnode(
                             place(&overlay, 0.0, 0.0, avail_w, row_h);
                             freeze_autoresizing_for_manual_frames(&overlay);
                             shell_ns.addSubview(&overlay);
+                            super::hover::sync_hover(&overlay, &props);
                         }
                         shell.setFrameSize(CGSize::new(avail_w, row_h));
                         place(shell_ns, x, y_top, avail_w, row_h);

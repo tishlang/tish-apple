@@ -32,8 +32,8 @@ use super::build::{
 use super::flipped::{snap_flipped_split_panes_full_height, FlippedVisualEffectView};
 use super::style::{
     apply_layer_style_to_view, apply_nstext_view_document_background_from_props,
-    apply_static_label_text_field, has_container_layer_style, resolve_ns_color,
-    single_line_label_height_after_style,
+    apply_static_label_text_field, apply_text_input_chrome, has_container_layer_style, resolve_ns_color,
+    single_line_label_height_after_style, text_input_height,
 };
 use super::markdown_view::{apply_markdown_text_view_chrome, set_text_view_markdown};
 use super::canonical_host_tag;
@@ -654,7 +654,8 @@ fn patch_vnode(
                             )));
                         }
                     }
-                    let h = 24.0;
+                    apply_text_input_chrome(tf, &props, ctx.mtm);
+                    let h = text_input_height(tf, &props);
                     place(tf, ix, iy, iw, h);
                     freeze_autoresizing_for_manual_frames(tf);
                     *slot += 1;

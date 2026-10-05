@@ -435,23 +435,28 @@ fn patch_vnode(
                             max_h = max_h.max(h);
                             x_off += cw;
                         }
-                        let expected = children.len() + if click_overlay { 1 } else { 0 };
-                        if inner != children.len()
-                            || shell.subviews().count() as usize != expected
-                        {
+                        // A container child (`div`) lays its children straight into the shell,
+                        // so `inner` (views used) can exceed the child count; the click overlay
+                        // is added after all of them.
+                        let expected = inner + if click_overlay { 1 } else { 0 };
+                        if shell.subviews().count() as usize != expected {
                             return Err(());
                         }
+                        let content_h = max_h.max(1.0);
+                        let row_h = row_shell_outer_height(pt, pb, content_h, &props);
                         if click_overlay {
-                            let ov = shell.subviews().objectAtIndex(children.len());
+                            let ov = shell.subviews().objectAtIndex(inner);
                             if !ov.isKindOfClass(NSButton::class()) {
                                 return Err(());
                             }
                             let btn: &NSButton =
                                 unsafe { &*(std::ptr::from_ref(&*ov).cast::<NSButton>()) };
                             wire_on_click_patch(&props, btn, ctx, btn.tag());
+                            // The row may have grown or shrunk since it was built; the overlay
+                            // must cover it all or clicks miss.
+                            place(btn, 0.0, 0.0, avail_w, row_h);
+                            super::hover::sync_hover(btn, &props);
                         }
-                        let content_h = max_h.max(1.0);
-                        let row_h = row_shell_outer_height(pt, pb, content_h, &props);
                         let inner_h = (row_h - pt - pb).max(0.0);
                         row_shell_reposition_children(
                             &*shell,

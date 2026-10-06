@@ -2,6 +2,7 @@
 //! (NSWorkspace), folder watching (FSEvents) and URL schemes. Each is a namespace on `macos`
 //! (`macos.timeZones`, `macos.dictionary`, …); callbacks run on the main thread.
 
+mod accessibility;
 mod contacts;
 mod dictionary;
 mod folders;
@@ -107,6 +108,17 @@ pub(crate) fn install(macos: &mut ObjectMap) {
         Arc::from("contacts"),
         namespace(vec![("status", contacts::t_status), ("request", contacts::t_request), ("query", contacts::t_search)]),
     );
+    macos.insert(
+        Arc::from("accessibility"),
+        namespace(vec![
+            ("trusted", accessibility::t_trusted),
+            ("selectedText", accessibility::t_selected_text),
+            ("replaceBeforeCursor", accessibility::t_replace_before_cursor),
+            ("focusedWindow", accessibility::t_focused_window),
+            ("setFocusedWindowFrame", accessibility::t_set_focused_window_frame),
+        ]),
+    );
+    macos.insert(Arc::from("screens"), Value::native(accessibility::t_screens));
     macos.insert(Arc::from("watchFolders"), Value::native(folders::watch));
     macos.insert(Arc::from("onOpenUrl"), Value::native(openurl::on_open_url));
 }

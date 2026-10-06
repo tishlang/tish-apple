@@ -1,6 +1,7 @@
 //! AppKit host: `macos.run`, vnode commit, `window` API.
 
 mod async_api;
+mod sys;
 mod build;
 mod prop_warn;
 mod scroll_chrome_embed;
@@ -1114,6 +1115,7 @@ pub fn macos_object() -> Value {
         Arc::from("notificationShow"),
         Value::native(notifications::native_show),
     );
+    sys::install(&mut macos_inner);
     let macos_val = Value::object(macos_inner);
 
     let mut root = ObjectMap::default();

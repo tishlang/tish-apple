@@ -45,3 +45,19 @@ macos.whenSettled(fetch(url), (res, err) => pump(res.body.getReader(), show, fin
 
 A failed request settles with an error response (`{ ok: false, error }`), like `await fetch`.
 See `examples/async-macos`.
+
+## System services
+
+Namespaces on `macos` for macOS services that aren't UI. Callbacks run on the main thread.
+
+| API | What |
+|---|---|
+| `macos.timeZones.names()` / `.local()` / `.at(id, unix)` / `.byAbbreviation(abbr)` | macOS's time-zone database: ids, the local zone, `{ offset, abbreviation }` at a moment (daylight saving included), a zone for "CET" |
+| `macos.dictionary.lookup(word)` | the plain text of each homograph in the system dictionary, first one first |
+| `macos.pasteboard.readText()` / `.writeText(text)` / `.watch(cb)` | the general pasteboard's text; `watch` calls `cb({ text, app, appPath })` for each copy, skipping password-manager items, with `app` "" for this app's own writes |
+| `macos.workspace.open(target)` / `.reveal(path)` / `.trash(path)` / `.appsFor(path)` / `.openWith(path, app)` | open a URL or path, select a file in Finder, move to the Trash (`{ ok, path, error }`), the apps that can open a file (default first), open with one |
+| `macos.watchFolders(paths, latency, cb)` | `cb()` after changes under `paths`, coalesced over `latency` seconds (FSEvents) |
+| `macos.onOpenUrl(cb)` | `cb(url)` for each URL macOS opens with the app (a scheme in its Info.plist); call before the run loop starts |
+
+The native backend lowers a bare `x.at(i)` to `Array.prototype.at`, so bind `macos.timeZones.at`
+to a name before calling it (`let zoneAt = macos.timeZones.at`).

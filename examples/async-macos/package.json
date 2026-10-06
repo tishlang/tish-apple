@@ -1,0 +1,15 @@
+{
+  "name": "async-macos",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@tishlang/tish": "^3.15.2",
+    "@tishlang/tish-macos": "^1.5.0"
+  },
+  "scripts": {
+    "build": "tish build --target native --native-backend rust src/main.tish -o dist/async-macos",
+    "dev": "npm run build && ./dist/async-macos",
+    "start": "npm run dev"
+  },
+  "description": "Streams an HTTP response and runs timers on the main thread with macos.whenSettled / macos.startTimers"
+}

@@ -20,3 +20,7 @@
 // @tish-source window.snapToRegion src/appkit/window_api.rs 382 | Snap to named region (`left`, `right`, `maximize`, …).
 // @tish-source window.toggleSidebar src/appkit/window_api.rs 391 | Toggle split sidebar (`NSSplitViewController`).
 // @tish-source window.sidebarCollapsed src/appkit/window_api.rs 398 | Whether the sidebar pane is collapsed.
+
+// Async on the main thread (src/appkit/async_api.rs).
+// @tish-source macos.whenSettled src/appkit/mod.rs 1089 | whenSettled(promise, cb): wait off the main thread, then cb(value, error) on it.
+// @tish-source macos.startTimers src/appkit/mod.rs 1091 | Drive setTimeout / setInterval from the main run loop.

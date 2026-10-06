@@ -64,6 +64,7 @@ Namespaces on `macos` for macOS services that aren't UI. Callbacks run on the ma
 | `macos.contacts.status()` / `.request(cb)` / `.query(text, limit, cb)` | the address book; needs `NSContactsUsageDescription` in the app's Info.plist |
 | `macos.accessibility.trusted(prompt)` / `.selectedText()` / `.replaceBeforeCursor(typed, text)` / `.focusedWindow()` / `.setFocusedWindowFrame(x, y, w, h)` | other apps through Accessibility (needs the app in System Settings › Privacy & Security › Accessibility) |
 | `macos.screens()` | `[{ visible, frame }]` for every display, in Accessibility's top-left coordinates |
+| `macos.spotlight.query(query, { scope, max }, cb?)` | files from Spotlight's index for an MDQuery string: `[{ path, contentType, size, created, modified, lastUsed }]`; with `cb` it runs on a background thread |
 
 The native backend lowers some method names to the string/array built-ins whatever the receiver
 (`at`, `search`, `match`, `replace`, `push`, `slice`, …), so these APIs avoid them, except

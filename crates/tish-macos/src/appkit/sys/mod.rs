@@ -8,6 +8,7 @@ mod dictionary;
 mod folders;
 mod openurl;
 mod pasteboard;
+mod spotlight;
 mod system;
 mod sysinfo;
 mod timezones;
@@ -119,6 +120,7 @@ pub(crate) fn install(macos: &mut ObjectMap) {
         ]),
     );
     macos.insert(Arc::from("screens"), Value::native(accessibility::t_screens));
+    macos.insert(Arc::from("spotlight"), namespace(vec![("query", spotlight::query)]));
     macos.insert(Arc::from("watchFolders"), Value::native(folders::watch));
     macos.insert(Arc::from("onOpenUrl"), Value::native(openurl::on_open_url));
 }

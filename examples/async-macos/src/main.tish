@@ -1,0 +1,38 @@
+// Streams a slow HTTP response chunk by chunk while a timer keeps ticking, all on the main
+// thread and without blocking it: macos.whenSettled waits for each promise off the main thread
+// and calls back on it.
+import { macos } from "@tishlang/tish-macos"
+import { fetch } from "tish:http"
+import { exit } from "tish:process"
+
+let t0 = Date.now()
+let ticks = 0
+
+fn ms() {
+  return (Date.now() - t0) + " ms"
+}
+
+fn pump(reader) {
+  macos.whenSettled(reader.read(), (r, err) => {
+    if (err !== null || r.done) {
+      console.log("done at " + ms() + "; the timer ticked " + ticks + " times meanwhile")
+      exit(0)
+      return
+    }
+    console.log("chunk at " + ms() + ": " + r.value.length + " bytes")
+    pump(reader)
+  })
+}
+
+macos.startTimers()
+setInterval(() => { ticks = ticks + 1 }, 50)
+macos.whenSettled(fetch("https://httpbin.org/drip?duration=2&numbytes=5&delay=0"), (res, err) => {
+  if (!res.ok) {
+    console.log("request failed: " + res.error)
+    exit(1)
+  }
+  console.log("status " + res.status + " at " + ms())
+  pump(res.body.getReader())
+})
+console.log("the main thread is free at " + ms())
+macos.runEventLoop()

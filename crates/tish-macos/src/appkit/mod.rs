@@ -1,5 +1,6 @@
 //! AppKit host: `macos.run`, vnode commit, `window` API.
 
+mod async_api;
 mod build;
 mod prop_warn;
 mod scroll_chrome_embed;
@@ -1082,6 +1083,14 @@ pub fn macos_object() -> Value {
             let key = a.first().map(|v| v.to_display_string()).unwrap_or_default();
             let val = a.get(1).map(|v| v.to_display_string()).unwrap_or_default();
             prefs::preference_set(&key, &val);
+            Value::Null
+        }),
+    );
+    macos_inner.insert(Arc::from("whenSettled"), Value::native(async_api::when_settled));
+    macos_inner.insert(
+        Arc::from("startTimers"),
+        Value::native(|_| {
+            install_timer_drain_pump();
             Value::Null
         }),
     );

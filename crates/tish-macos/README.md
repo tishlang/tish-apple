@@ -16,3 +16,32 @@ To also jump built-in JS globals (`console`, …) from the main compiler tree, s
 1. Open **`tish-macos-dev.code-workspace`** (adds the sibling `tish` folder and sets `tish.tishlangSourceRoot`), **or** open **`examples/kitchen-sink-macos`** alone (folder settings point at `../../../tish` for the compiler repo).
 2. Build the language server once: `cargo build -p tishlang_lsp` from the **`tish`** repo (debug binary: `target/debug/tish-lsp`). This repo’s **`.vscode/settings.json`**, **`tish-macos-dev.code-workspace`**, and **`examples/kitchen-sink-macos/.vscode/settings.json`** already set **`tish.languageServerPath`** to that binary via **`${workspaceFolder}`** / **`${workspaceFolder:tish-compiler}`** (expanded by the Tish extension).
 3. In `examples/kitchen-sink-macos/src/main.tish`, hover **`innerHeight`** on the `window.innerHeight()` line — you should see the pragma doc and an “Open Rust implementation” link.
+
+## Async on the main thread
+
+On the native backend `await` blocks the thread it runs on, and Tish code must stay on the thread
+that started it. In an AppKit app that thread is the main one, so awaiting a fetch there freezes
+the UI. Two calls let the app keep going and be called back on the main thread:
+
+- `macos.whenSettled(promise, cb)` waits for any Tish promise (`fetch(url)`, `res.text()`,
+  `reader.read()`, …) on a background thread, then calls `cb(value, error)` on the main thread
+  (`error` is null when it fulfilled). A non-promise value is passed to `cb` on the next turn.
+- `macos.startTimers()` drives the global `setTimeout` / `setInterval` from the main run loop
+  (every 32 ms). `macos.run` already does this; call it when your app sets up AppKit itself.
+
+Streaming a response, chunk by chunk as the server sends it:
+
+```tish
+fn pump(reader, onChunk, done) {
+  macos.whenSettled(reader.read(), (r, err) => {
+    if (err !== null || r.done) { done(err); return }
+    onChunk(r.value)
+    pump(reader, onChunk, done)
+  })
+}
+
+macos.whenSettled(fetch(url), (res, err) => pump(res.body.getReader(), show, finish))
+```
+
+A failed request settles with an error response (`{ ok: false, error }`), like `await fetch`.
+See `examples/async-macos`.

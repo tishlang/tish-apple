@@ -185,6 +185,8 @@ pub fn macos_object() -> Value {
     );
     macos_inner.insert(Arc::from("preferencesSet"), noop.clone());
     macos_inner.insert(Arc::from("playNamedSound"), noop.clone());
+    macos_inner.insert(Arc::from("whenSettled"), noop.clone());
+    macos_inner.insert(Arc::from("startTimers"), noop.clone());
     macos_inner.insert(
         Arc::from("notificationPermissionState"),
         Value::native(|_a: &[Value]| {

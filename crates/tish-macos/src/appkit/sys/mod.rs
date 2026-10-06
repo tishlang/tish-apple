@@ -2,10 +2,13 @@
 //! (NSWorkspace), folder watching (FSEvents) and URL schemes. Each is a namespace on `macos`
 //! (`macos.timeZones`, `macos.dictionary`, …); callbacks run on the main thread.
 
+mod contacts;
 mod dictionary;
 mod folders;
 mod openurl;
 mod pasteboard;
+mod system;
+mod sysinfo;
 mod timezones;
 mod workspace;
 
@@ -76,6 +79,76 @@ pub(crate) fn install(macos: &mut ObjectMap) {
             ("openWith", workspace::open_with),
         ]),
     );
+    macos.insert(
+        Arc::from("system"),
+        namespace(vec![
+            ("lockScreen", system::t_lock),
+            ("sleep", system::t_sleep),
+            ("sleepDisplays", system::t_sleep_displays),
+            ("screenSaver", system::t_screen_saver),
+            ("restart", system::t_restart),
+            ("shutDown", system::t_shut_down),
+            ("logOut", system::t_log_out),
+            ("emptyTrash", system::t_empty_trash),
+            ("darkMode", system::t_dark_mode),
+            ("setDarkMode", system::t_set_dark_mode),
+            ("volume", system::t_volume),
+            ("setVolume", system::t_set_volume),
+            ("setMuted", system::t_set_muted),
+            ("ejectAll", system::t_eject_all),
+        ]),
+    );
+    macos.insert(
+        Arc::from("apps"),
+        namespace(vec![("running", system::t_running), ("act", system::t_act), ("quitAll", system::t_quit_all), ("hideAll", system::t_hide_all)]),
+    );
+    macos.insert(Arc::from("systemInfo"), Value::native(sysinfo::system_info));
+    macos.insert(
+        Arc::from("contacts"),
+        namespace(vec![("status", contacts::t_status), ("request", contacts::t_request), ("query", contacts::t_search)]),
+    );
     macos.insert(Arc::from("watchFolders"), Value::native(folders::watch));
     macos.insert(Arc::from("onOpenUrl"), Value::native(openurl::on_open_url));
+}
+
+// ── Blocking work off the main thread ───────────────────────────────────────
+
+thread_local! {
+    /// Callbacks waiting for background work, by id (main thread only).
+    static PENDING: std::cell::RefCell<std::collections::HashMap<u64, Value>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+static NEXT_PENDING: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+/// Keep `cb` (main thread) until `deliver` answers it; returns its id.
+pub(crate) fn hold(cb: Option<&Value>) -> u64 {
+    let id = NEXT_PENDING.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    if let Some(cb) = cb {
+        PENDING.with(|p| p.borrow_mut().insert(id, cb.clone()));
+    }
+    id
+}
+
+/// From any thread: on the main queue, turn `data` into a value and pass it to callback `id`.
+pub(crate) fn deliver<T: Send + 'static>(id: u64, data: T, make: fn(T) -> Value) {
+    dispatch2::DispatchQueue::main().exec_async(move || {
+        if let Some(cb) = PENDING.with(|p| p.borrow_mut().remove(&id)) {
+            call(&cb, &[make(data)]);
+        }
+    });
+}
+
+/// Run `work` on a background thread, then `cb(make(result))` on the main thread. Only `work`'s
+/// plain result crosses threads; the callback stays on the main thread.
+pub(crate) fn in_background<T: Send + 'static>(cb: Option<&Value>, work: impl FnOnce() -> T + Send + 'static, make: fn(T) -> Value) {
+    let id = hold(cb);
+    std::thread::spawn(move || deliver(id, work(), make));
+}
+
+/// null for success, else the error message.
+pub(crate) fn outcome(r: Result<(), String>) -> Value {
+    match r {
+        Ok(()) => Value::Null,
+        Err(e) => s(&e),
+    }
 }

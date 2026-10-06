@@ -6,9 +6,11 @@ mod accessibility;
 mod contacts;
 mod dictionary;
 mod folders;
+mod icons;
 mod openurl;
 mod pasteboard;
 mod spotlight;
+mod statusitem;
 mod system;
 mod sysinfo;
 mod timezones;
@@ -121,6 +123,11 @@ pub(crate) fn install(macos: &mut ObjectMap) {
     );
     macos.insert(Arc::from("screens"), Value::native(accessibility::t_screens));
     macos.insert(Arc::from("spotlight"), namespace(vec![("query", spotlight::query)]));
+    macos.insert(
+        Arc::from("icons"),
+        namespace(vec![("file", icons::file), ("symbol", icons::symbol), ("image", icons::image), ("onLoaded", icons::on_loaded)]),
+    );
+    macos.insert(Arc::from("statusItem"), Value::native(statusitem::status_item));
     macos.insert(Arc::from("watchFolders"), Value::native(folders::watch));
     macos.insert(Arc::from("onOpenUrl"), Value::native(openurl::on_open_url));
 }

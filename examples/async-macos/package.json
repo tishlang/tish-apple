@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@tishlang/tish": "^3.15.2",
+    "@tishlang/tish": "^4.0.1",
     "@tishlang/tish-macos": "^1.5.0"
   },
   "scripts": {

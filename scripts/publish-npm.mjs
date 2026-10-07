@@ -50,9 +50,9 @@ const opt = (name) => {
 
 const tagEnv = process.env.TAG?.replace(/^v/, "");
 const version = opt("--version") ?? process.env.VERSION ?? tagEnv;
-// tishlang_* tracks the core tish train (3.x). tishlang_broker is published from
+// tishlang_* tracks the core tish train (4.x). tishlang_broker is published from
 // tishlang/tish-desktop, which versions on its OWN line (1.x) — not the core train.
-const core = opt("--core") ?? process.env.TISHLANG_CORE_VERSION ?? "3.0";
+const core = opt("--core") ?? process.env.TISHLANG_CORE_VERSION ?? "4.0.1";
 const broker = opt("--broker") ?? process.env.TISH_BROKER_VERSION ?? "1.0";
 const dryRun = flag("--dry-run");
 const only = opt("--only");

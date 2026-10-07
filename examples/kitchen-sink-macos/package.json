@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Exercises @tishlang/tish-macos widgets + window API",
   "dependencies": {
-    "@tishlang/tish": "^2.39.0",
+    "@tishlang/tish": "^4.0.1",
     "@tishlang/tish-macos": "^0.2.0"
   },
   "scripts": {

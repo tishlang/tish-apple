@@ -2,7 +2,7 @@
   "name": "hello-ios-example",
   "private": true,
   "version": "0.0.1",
-  "license": "PIF",
+  "license": "MIT",
   "description": "Pure-native UIKit hello: @tishlang/tish-ios host only (no tish-desktop). Cross-device broker/webview demo lives in tish-desktop/examples/hello-ios.",
   "dependencies": {
     "@tishlang/tish": "^2.39.0",

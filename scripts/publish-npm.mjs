@@ -145,7 +145,7 @@ function stage(pkg) {
   // compiler matches node_modules/@tishlang/tish-macos by this exact name.
   p.name = pkg.npmName;
   p.version = version;
-  p.license = "PIF";
+  p.license = "MIT";
   p.repository = p.repository ?? { type: "git", url: "https://github.com/tishlang/tish-apple.git" };
   p.publishConfig = { access: "public", ...(p.publishConfig ?? {}) };
   p.files = ["Cargo.toml", "src/", "LICENSE", "README.md", "lsp-pragmas.d.tish"];

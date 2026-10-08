@@ -78,7 +78,8 @@ fn warm_later(img: Retained<NSImage>) {
 }
 
 fn schedule_warm() {
-    let when = DispatchTime::try_from(std::time::Duration::from_millis(1)).unwrap_or(DispatchTime::NOW);
+    let when =
+        DispatchTime::try_from(std::time::Duration::from_millis(1)).unwrap_or(DispatchTime::NOW);
     let _ = DispatchQueue::main().after(when, warm_next);
 }
 
@@ -119,13 +120,17 @@ pub(super) fn symbol(args: &[Value]) -> Value {
 
 /// FNV-1a, so a path gets a short stable image name.
 fn fnv(x: &str) -> u64 {
-    x.bytes().fold(0xcbf29ce484222325, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3))
+    x.bytes().fold(0xcbf29ce484222325, |h, b| {
+        (h ^ b as u64).wrapping_mul(0x100000001b3)
+    })
 }
 
 /// Make the image in `path` the one named `name`. False when it isn't a readable image.
 fn register(name: &str, path: &Path) -> bool {
     let file = NSString::from_str(&path.to_string_lossy());
-    let Some(img) = NSImage::initWithContentsOfFile(NSImage::alloc(), &file) else { return false };
+    let Some(img) = NSImage::initWithContentsOfFile(NSImage::alloc(), &file) else {
+        return false;
+    };
     if !img.isValid() {
         return false;
     }
@@ -139,7 +144,11 @@ fn register(name: &str, path: &Path) -> bool {
 pub(super) fn image(args: &[Value]) -> Value {
     let path = str_arg(args, 0);
     let (template, reload) = (flag(args, 1), flag(args, 2));
-    let name = format!("tish-file-{:016x}{}", fnv(&path), if template { "-t" } else { "" });
+    let name = format!(
+        "tish-file-{:016x}{}",
+        fnv(&path),
+        if template { "-t" } else { "" }
+    );
     let ns_name = NSString::from_str(&name);
     if (reload || NSImage::imageNamed(&ns_name).is_none()) && !register(&name, Path::new(&path)) {
         return s("");

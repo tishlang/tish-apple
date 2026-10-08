@@ -197,10 +197,7 @@ pub(super) fn snap_flipped_split_panes_full_height(split: &NSSplitView) {
         let f = v.frame();
         let x = f.origin.x;
         let w = f.size.width.max(0.0);
-        v.setFrame(NSRect::new(
-            CGPoint::new(x, 0.0),
-            CGSize::new(w, h),
-        ));
+        v.setFrame(NSRect::new(CGPoint::new(x, 0.0), CGSize::new(w, h)));
     }
 }
 

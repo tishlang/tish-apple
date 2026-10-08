@@ -12,9 +12,9 @@
 use std::ptr::NonNull;
 
 use block2::RcBlock;
+use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject, Bool};
-use objc2::msg_send;
 use objc2_foundation::{NSArray, NSError, NSString};
 
 #[link(name = "Contacts", kind = "framework")]
@@ -54,8 +54,16 @@ pub struct Contact {
 impl Contact {
     /// "Given Family", else the nickname, company, first email or first phone.
     pub fn name(&self) -> String {
-        let full = [self.given.trim(), self.family.trim()].iter().filter(|p| !p.is_empty()).copied().collect::<Vec<_>>().join(" ");
-        let named = [full.as_str(), self.nickname.trim(), self.org.trim()].into_iter().find(|n| !n.is_empty()).map(str::to_string);
+        let full = [self.given.trim(), self.family.trim()]
+            .iter()
+            .filter(|p| !p.is_empty())
+            .copied()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let named = [full.as_str(), self.nickname.trim(), self.org.trim()]
+            .into_iter()
+            .find(|n| !n.is_empty())
+            .map(str::to_string);
         named
             .or_else(|| self.emails.first().map(|e| e.value.clone()))
             .or_else(|| self.phones.first().map(|p| p.value.clone()))
@@ -65,7 +73,9 @@ impl Contact {
 
 /// notDetermined, restricted, denied, authorized or limited. Never prompts.
 fn status() -> &'static str {
-    let Some(cls) = AnyClass::get(c"CNContactStore") else { return "restricted" };
+    let Some(cls) = AnyClass::get(c"CNContactStore") else {
+        return "restricted";
+    };
     let s: isize = unsafe { msg_send![cls, authorizationStatusForEntityType: ENTITY_CONTACTS] };
     match s {
         0 => "notDetermined",
@@ -83,7 +93,9 @@ fn allowed() -> bool {
 /// Shows the system prompt (once; later calls answer from the saved choice). `done(granted)` runs
 /// on a framework queue.
 fn request(done: impl Fn(bool) + 'static) {
-    let Some(cls) = AnyClass::get(c"CNContactStore") else { return done(false) };
+    let Some(cls) = AnyClass::get(c"CNContactStore") else {
+        return done(false);
+    };
     let store: Retained<AnyObject> = unsafe { msg_send![cls, new] };
     let keep = store.clone();
     let block = RcBlock::new(move |granted: Bool, _e: *mut NSError| {
@@ -117,14 +129,24 @@ fn text(s: Option<Retained<NSString>>) -> String {
 fn label(lv: &AnyObject) -> String {
     let raw: Option<Retained<NSString>> = unsafe { msg_send![lv, label] };
     let Some(raw) = raw else { return String::new() };
-    let Some(cls) = AnyClass::get(c"CNLabeledValue") else { return raw.to_string() };
-    let shown: Option<Retained<NSString>> = unsafe { msg_send![cls, localizedStringForLabel: &*raw] };
-    shown.map(|s| s.to_string()).unwrap_or_else(|| raw.to_string())
+    let Some(cls) = AnyClass::get(c"CNLabeledValue") else {
+        return raw.to_string();
+    };
+    let shown: Option<Retained<NSString>> =
+        unsafe { msg_send![cls, localizedStringForLabel: &*raw] };
+    shown
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| raw.to_string())
 }
 
 fn fields(contact: &AnyObject, phones: bool) -> Vec<Field> {
-    let list: Option<Retained<NSArray<AnyObject>>> =
-        unsafe { if phones { msg_send![contact, phoneNumbers] } else { msg_send![contact, emailAddresses] } };
+    let list: Option<Retained<NSArray<AnyObject>>> = unsafe {
+        if phones {
+            msg_send![contact, phoneNumbers]
+        } else {
+            msg_send![contact, emailAddresses]
+        }
+    };
     let Some(list) = list else { return Vec::new() };
     list.iter()
         .filter_map(|lv| {
@@ -136,7 +158,10 @@ fn fields(contact: &AnyObject, phones: bool) -> Vec<Field> {
                 let s: &NSString = unsafe { &*(Retained::as_ptr(&value) as *const NSString) };
                 s.to_string()
             };
-            (!value.is_empty()).then(|| Field { label: label(&lv), value })
+            (!value.is_empty()).then(|| Field {
+                label: label(&lv),
+                value,
+            })
         })
         .collect()
 }
@@ -187,9 +212,11 @@ fn search(query: &str, limit: usize) -> Result<Vec<Contact>, String> {
     }
     let contact_cls = AnyClass::get(c"CNContact").ok_or("Contacts is unavailable")?;
     let name = NSString::from_str(query.trim());
-    let predicate: Retained<AnyObject> = unsafe { msg_send![contact_cls, predicateForContactsMatchingName: &*name] };
-    let found: Result<Retained<NSArray<AnyObject>>, Retained<NSError>> =
-        unsafe { msg_send![&*store, unifiedContactsMatchingPredicate: &*predicate, keysToFetch: &*keys, error: _] };
+    let predicate: Retained<AnyObject> =
+        unsafe { msg_send![contact_cls, predicateForContactsMatchingName: &*name] };
+    let found: Result<Retained<NSArray<AnyObject>>, Retained<NSError>> = unsafe {
+        msg_send![&*store, unifiedContactsMatchingPredicate: &*predicate, keysToFetch: &*keys, error: _]
+    };
     let found = found.map_err(|e| e.localizedDescription().to_string())?;
     let mut list: Vec<Contact> = found.iter().map(|c| read(&c)).collect();
     sort(&mut list, query);
@@ -231,7 +258,10 @@ use super::{arr, deliver, hold, in_background, num_arg, obj, s, str_arg};
 use tishlang_core::Value;
 
 fn fields_value(list: &[Field]) -> Value {
-    arr(list.iter().map(|f| obj(vec![("label", s(&f.label)), ("value", s(&f.value))])).collect())
+    arr(list
+        .iter()
+        .map(|f| obj(vec![("label", s(&f.label)), ("value", s(&f.value))]))
+        .collect())
 }
 
 fn contact_value(c: &Contact) -> Value {
@@ -261,9 +291,16 @@ pub(super) fn t_request(args: &[Value]) -> Value {
 pub(super) fn t_search(args: &[Value]) -> Value {
     let query = str_arg(args, 0);
     let limit = num_arg(args, 1, 50.0).max(0.0) as usize;
-    in_background(args.get(2), move || search(&query, limit), |r| match r {
-        Ok(list) => obj(vec![("contacts", arr(list.iter().map(contact_value).collect())), ("error", s(""))]),
-        Err(e) => obj(vec![("contacts", arr(Vec::new())), ("error", s(&e))]),
-    });
+    in_background(
+        args.get(2),
+        move || search(&query, limit),
+        |r| match r {
+            Ok(list) => obj(vec![
+                ("contacts", arr(list.iter().map(contact_value).collect())),
+                ("error", s("")),
+            ]),
+            Err(e) => obj(vec![("contacts", arr(Vec::new())), ("error", s(&e))]),
+        },
+    );
     Value::Null
 }

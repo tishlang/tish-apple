@@ -22,7 +22,12 @@ type CFTypeRef = *const c_void;
 
 #[link(name = "CoreServices", kind = "framework")]
 extern "C" {
-    fn MDQueryCreate(alloc: CFTypeRef, query: CFTypeRef, value_list_attrs: CFTypeRef, sorting_attrs: CFTypeRef) -> CFTypeRef;
+    fn MDQueryCreate(
+        alloc: CFTypeRef,
+        query: CFTypeRef,
+        value_list_attrs: CFTypeRef,
+        sorting_attrs: CFTypeRef,
+    ) -> CFTypeRef;
     fn MDQuerySetSearchScope(query: CFTypeRef, scope: CFTypeRef, options: u32);
     fn MDQuerySetMaxCount(query: CFTypeRef, size: isize);
     fn MDQueryExecute(query: CFTypeRef, options: usize) -> u8;
@@ -94,19 +99,29 @@ fn run(query: &str, scope: &str, max: isize) -> Result<Vec<Item>, String> {
     let mut out = Vec::new();
     unsafe {
         let qs = NSString::from_str(query);
-        let mdq = MDQueryCreate(std::ptr::null(), Retained::as_ptr(&qs) as CFTypeRef, std::ptr::null(), std::ptr::null());
+        let mdq = MDQueryCreate(
+            std::ptr::null(),
+            Retained::as_ptr(&qs) as CFTypeRef,
+            std::ptr::null(),
+            std::ptr::null(),
+        );
         if mdq.is_null() {
             return Err(format!("not a Spotlight query: {query}"));
         }
         let folder = NSString::from_str(scope);
-        let scopes: Retained<NSArray<NSString>> =
-            if scope.is_empty() || scope == "home" { NSArray::from_slice(&[&*(kMDQueryScopeHome as *const NSString)]) } else { NSArray::from_slice(&[&*folder]) };
+        let scopes: Retained<NSArray<NSString>> = if scope.is_empty() || scope == "home" {
+            NSArray::from_slice(&[&*(kMDQueryScopeHome as *const NSString)])
+        } else {
+            NSArray::from_slice(&[&*folder])
+        };
         MDQuerySetSearchScope(mdq, Retained::as_ptr(&scopes) as CFTypeRef, 0);
         MDQuerySetMaxCount(mdq, max);
         if MDQueryExecute(mdq, K_MD_QUERY_SYNCHRONOUS) != 0 {
             for i in 0..MDQueryGetResultCount(mdq) {
                 let item = MDQueryGetResultAtIndex(mdq, i);
-                let Some(path) = copy_string(item, kMDItemPath) else { continue };
+                let Some(path) = copy_string(item, kMDItemPath) else {
+                    continue;
+                };
                 out.push(Item {
                     path,
                     content_type: copy_string(item, kMDItemContentType).unwrap_or_default(),
@@ -162,12 +177,18 @@ pub(super) fn query(args: &[Value]) -> Value {
     };
     match args.get(2) {
         Some(cb @ Value::Function(_)) => {
-            in_background(Some(cb), move || run(&q, &scope, max.max(1)), |r| match r {
-                Ok(items) => obj(vec![("items", items_value(&items)), ("error", s(""))]),
-                Err(e) => obj(vec![("items", arr(Vec::new())), ("error", s(&e))]),
-            });
+            in_background(
+                Some(cb),
+                move || run(&q, &scope, max.max(1)),
+                |r| match r {
+                    Ok(items) => obj(vec![("items", items_value(&items)), ("error", s(""))]),
+                    Err(e) => obj(vec![("items", arr(Vec::new())), ("error", s(&e))]),
+                },
+            );
             Value::Null
         }
-        _ => run(&q, &scope, max.max(1)).map(|items| items_value(&items)).unwrap_or_else(|_| arr(Vec::new())),
+        _ => run(&q, &scope, max.max(1))
+            .map(|items| items_value(&items))
+            .unwrap_or_else(|_| arr(Vec::new())),
     }
 }

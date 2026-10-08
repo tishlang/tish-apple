@@ -5,8 +5,13 @@ use std::cell::{Cell, RefCell};
 
 use objc2::rc::{Retained, Weak};
 use objc2::runtime::AnyObject;
-use objc2::{define_class, msg_send, AnyThread, ClassType, DefinedClass, MainThreadMarker, MainThreadOnly};
-use objc2_app_kit::{NSButton, NSColor, NSControl, NSEvent, NSResponder, NSTrackingArea, NSTrackingAreaOptions, NSView};
+use objc2::{
+    define_class, msg_send, AnyThread, ClassType, DefinedClass, MainThreadMarker, MainThreadOnly,
+};
+use objc2_app_kit::{
+    NSButton, NSColor, NSControl, NSEvent, NSResponder, NSTrackingArea, NSTrackingAreaOptions,
+    NSView,
+};
 use objc2_foundation::{NSObject, NSObjectProtocol, NSRect};
 use tishlang_apple_common::style::props_string;
 use tishlang_core::PropMap;
@@ -113,7 +118,9 @@ impl HoverButton {
     }
 
     fn paint(&self) {
-        let Some(row) = (unsafe { self.superview() }) else { return };
+        let Some(row) = (unsafe { self.superview() }) else {
+            return;
+        };
         let inside = self.ivars().inside.get();
         let hover = self.ivars().hover.borrow().clone();
         let color = match (inside, hover) {
@@ -152,7 +159,10 @@ pub(super) fn sync_hover(btn: &NSButton, props: &PropMap) {
 }
 
 pub fn clear_hover() {
-    if let Some(p) = CURRENT.with(|c| c.borrow_mut().take()).and_then(|w| w.load()) {
+    if let Some(p) = CURRENT
+        .with(|c| c.borrow_mut().take())
+        .and_then(|w| w.load())
+    {
         p.set_inside(false);
     }
 }

@@ -195,17 +195,13 @@ impl MacosSidebarHost {
                 );
             }
         } else {
-            self.toolbar_delegate.set_entries(
-                self.ctx.root_id,
-                Some(&self.ctx.router),
-                vec![],
-            );
+            self.toolbar_delegate
+                .set_entries(self.ctx.root_id, Some(&self.ctx.router), vec![]);
         }
         // Never use `NSWindowToolbarStyle::Automatic` here: it switches to classic titlebar layout
         // and breaks `NSSplitViewItem` sidebar position / material (card vs full-height).
         self.window.setToolbar(Some(self.toolbar.as_ref()));
-        self.window
-            .setToolbarStyle(NSWindowToolbarStyle::Unified);
+        self.window.setToolbarStyle(NSWindowToolbarStyle::Unified);
         self.toolbar_delegate
             .reload_default_items_into_toolbar(self.toolbar.as_ref());
         sync_sidebar_window_titlebar_chrome(self.window.as_ref(), show_titlebar);
@@ -232,8 +228,7 @@ impl MacosSidebarHost {
         split_root.layoutSubtreeIfNeeded();
         self.sidebar_as_nsv().layoutSubtreeIfNeeded();
         self.detail_as_nsv().layoutSubtreeIfNeeded();
-        self.last_quad
-            .set((f64::NAN, f64::NAN, f64::NAN, f64::NAN));
+        self.last_quad.set((f64::NAN, f64::NAN, f64::NAN, f64::NAN));
         self.relayout_dual();
         set_suppress_layout_notify(false);
     }

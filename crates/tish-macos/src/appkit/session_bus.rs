@@ -1,13 +1,13 @@
 //! Session-scoped messages between peer processes via `CFNotificationCenter` distributed center.
 
-use std::cell::RefCell;
-use std::ffi::c_void;
-use std::process::Command;
 use dispatch2::DispatchQueue;
 use objc2_core_foundation::{
     CFDictionary, CFMutableDictionary, CFNotificationCenter, CFNotificationSuspensionBehavior,
     CFString,
 };
+use std::cell::RefCell;
+use std::ffi::c_void;
+use std::process::Command;
 use tishlang_core::{NativeFn, Value};
 
 const NOTIFY_NAME: &str = "com.tishlang.tish-macos.session";
@@ -63,7 +63,10 @@ unsafe extern "C-unwind" fn distributed_callback(
     let dict: &objc2_core_foundation::CFDictionary<CFString, CFString> =
         unsafe { &*(user_info.cast()) };
     let key = CFString::from_static_str(USER_INFO_KEY);
-    let payload = unsafe { dict.get_unchecked(&*key).and_then(|cf| cf.as_str_unchecked()) };
+    let payload = unsafe {
+        dict.get_unchecked(&*key)
+            .and_then(|cf| cf.as_str_unchecked())
+    };
     let Some(payload) = payload else {
         return;
     };
@@ -82,10 +85,7 @@ unsafe extern "C-unwind" fn distributed_callback(
         // `onSessionMessage`, which must `borrow_mut` the same RefCell.
         let to_run = MESSAGE_HANDLER.with(|h| h.borrow().clone());
         if let Some(f) = to_run {
-            let _ = f.call(&[
-                Value::String(channel.into()),
-                Value::String(body.into()),
-            ]);
+            let _ = f.call(&[Value::String(channel.into()), Value::String(body.into())]);
         }
     });
 }
@@ -117,7 +117,10 @@ pub fn post_session_message(args: &[Value]) -> Value {
         .first()
         .map(|v| v.to_display_string())
         .unwrap_or_default();
-    let body = args.get(1).map(|v| v.to_display_string()).unwrap_or_default();
+    let body = args
+        .get(1)
+        .map(|v| v.to_display_string())
+        .unwrap_or_default();
     let session = current_session_id();
 
     let Some(center) = CFNotificationCenter::distributed_center() else {
@@ -134,12 +137,7 @@ pub fn post_session_message(args: &[Value]) -> Value {
     let m: &CFMutableDictionary<CFString, CFString> = dict.as_ref();
     let d: &CFDictionary<CFString, CFString> = m.as_ref();
     unsafe {
-        center.post_notification(
-            Some(&name),
-            std::ptr::null(),
-            Some(d.as_ref()),
-            true,
-        );
+        center.post_notification(Some(&name), std::ptr::null(), Some(d.as_ref()), true);
     }
     Value::Null
 }

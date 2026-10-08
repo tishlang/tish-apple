@@ -1,28 +1,27 @@
 //! Map committed vnodes to AppKit views (top-down layout; root content view is flipped).
 
-use std::rc::Rc;
-use std::sync::Arc;
+use super::webview_bridge;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, ProtocolObject};
 use objc2::{sel, AnyThread, ClassType, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
     NSAutoresizingMaskOptions, NSBezelStyle, NSBorderType, NSBox, NSBoxType, NSButton,
-    NSCellImagePosition, NSControl,
-    NSButtonType, NSColor, NSControlStateValueOff, NSControlStateValueOn, NSFont, NSImage,
-    NSImageScaling, NSImageSymbolConfiguration, NSImageSymbolScale, NSImageView,
-    NSProgressIndicator, NSProgressIndicatorStyle, NSPopUpButton,
-    NSScrollElasticity, NSScrollView, NSSecureTextField, NSSlider,
-    NSSplitViewDividerStyle, NSSwitch, NSTabView, NSTabViewItem, NSTextField, NSTextView,
+    NSButtonType, NSCellImagePosition, NSColor, NSControl, NSControlStateValueOff,
+    NSControlStateValueOn, NSFont, NSImage, NSImageScaling, NSImageSymbolConfiguration,
+    NSImageSymbolScale, NSImageView, NSPopUpButton, NSProgressIndicator, NSProgressIndicatorStyle,
+    NSScrollElasticity, NSScrollView, NSSecureTextField, NSSlider, NSSplitViewDividerStyle,
+    NSSwitch, NSTabView, NSTabViewItem, NSTextField, NSTextView,
     NSToolbarFlexibleSpaceItemIdentifier, NSToolbarItemIdentifier,
     NSToolbarSidebarTrackingSeparatorItemIdentifier, NSToolbarSpaceItemIdentifier,
-    NSToolbarToggleSidebarItemIdentifier, NSView,
-    NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView,
+    NSToolbarToggleSidebarItemIdentifier, NSView, NSVisualEffectBlendingMode,
+    NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView,
 };
 use objc2_core_foundation::{CGFloat, CGPoint, CGSize};
-use objc2_foundation::{NSEdgeInsets, NSObjectProtocol, NSRect, NSString, NSURL, NSURLRequest};
+use objc2_foundation::{NSEdgeInsets, NSObjectProtocol, NSRect, NSString, NSURLRequest, NSURL};
 use objc2_web_kit::WKWebView;
+use std::rc::Rc;
+use std::sync::Arc;
 pub(super) use tishlang_apple_common::style::{props_bool, props_f64, props_string};
-use super::webview_bridge;
 use tishlang_core::{ObjectMap, PropMap, Value};
 
 fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
@@ -33,29 +32,29 @@ fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
 
 use tishlang_ui::runtime::{is_fragment_tag, RootId};
 
+use super::canonical_host_tag;
 use super::flipped::{
     snap_flipped_split_panes_full_height, FlippedClipView, FlippedDocumentView, FlippedRootView,
     FlippedSplitView, FlippedVisualEffectView,
 };
-use super::prop_warn::{
-    warn_unknown_props, ROW_PROP_ALLOWLIST, SCROLL_PROP_ALLOWLIST, VISUAL_EFFECT_PROP_ALLOWLIST,
-};
-use super::markdown_view::{apply_markdown_text_view_chrome, set_text_view_markdown};
 use super::handlers::{
     install_text_change_tag_on_text_view, register_bool_handler, register_click_handler,
     register_f64_handler, register_pick_handler, register_text_change_handler,
     register_toolbar_action_slot,
 };
+use super::markdown_view::{apply_markdown_text_view_chrome, set_text_view_markdown};
+use super::prop_warn::{
+    warn_unknown_props, ROW_PROP_ALLOWLIST, SCROLL_PROP_ALLOWLIST, VISUAL_EFFECT_PROP_ALLOWLIST,
+};
 use super::router::MacosControlRouter;
-use super::toolbar_delegate::ToolbarEntry;
 use super::style::{
     apply_layer_style_to_view, apply_nstext_view_document_background_from_props,
-    apply_static_label_text_field, apply_text_input_chrome, has_container_layer_style, resolve_ns_color,
-    single_line_label_height_after_style, text_input_height,
+    apply_static_label_text_field, apply_text_input_chrome, has_container_layer_style,
+    resolve_ns_color, single_line_label_height_after_style, text_input_height,
 };
-use super::canonical_host_tag;
 use super::text_delegate::TextFieldDelegate;
 use super::text_view_delegate::TextViewDelegate;
+use super::toolbar_delegate::ToolbarEntry;
 
 /// Green scroll chrome + orange document layer for `scrollable` (any host). Disable after debugging.
 const DEBUG_TINT_SCROLLABLES: bool = false;
@@ -288,9 +287,6 @@ pub(super) fn vnode_props(obj: &PropMap) -> PropMap {
         _ => PropMap::default(),
     }
 }
-
-
-
 
 /// Like [`props_bool`] but returns **`None`** if no key is present (for tri-state defaults).
 pub(super) fn props_opt_bool(props: &PropMap, keys: &[&str]) -> Option<bool> {
@@ -572,8 +568,11 @@ pub(super) fn visual_effect_blending_from_props(props: &PropMap) -> NSVisualEffe
 }
 
 pub(super) fn visual_effect_state_from_props(props: &PropMap) -> NSVisualEffectState {
-    let s = props_string(props, &["state", "visualEffectState", "visual_effect_state"])
-        .unwrap_or_default();
+    let s = props_string(
+        props,
+        &["state", "visualEffectState", "visual_effect_state"],
+    )
+    .unwrap_or_default();
     match s.to_ascii_lowercase().as_str() {
         "active" => NSVisualEffectState::Active,
         "inactive" => NSVisualEffectState::Inactive,
@@ -591,7 +590,11 @@ pub(super) fn apply_visual_effect_view_from_props(fx: &NSVisualEffectView, props
     fx.setMaterial(visual_effect_material_from_props(props));
     fx.setBlendingMode(visual_effect_blending_from_props(props));
     fx.setState(visual_effect_state_from_props(props));
-    fx.setEmphasized(props_bool(props, &["emphasized", "isEmphasized", "is_emphasized"], false));
+    fx.setEmphasized(props_bool(
+        props,
+        &["emphasized", "isEmphasized", "is_emphasized"],
+        false,
+    ));
     let fx_ns: &NSView = unsafe { &*std::ptr::from_ref(fx).cast::<NSView>() };
     apply_layer_style_to_view(fx_ns, props);
     super::apply_view_appearance_from_props(fx_ns, props);
@@ -990,8 +993,8 @@ pub(super) fn apply_button_chrome(btn: &NSButton, props: &PropMap) {
             &NSString::from_str(name),
             None,
         ) {
-            let im = if let Some(scale_s) = props_string(props, &["symbolScale", "iconScale"])
-                .map(|s| s.to_ascii_lowercase())
+            let im = if let Some(scale_s) =
+                props_string(props, &["symbolScale", "iconScale"]).map(|s| s.to_ascii_lowercase())
             {
                 let sc = match scale_s.as_str() {
                     "small" => NSImageSymbolScale::Small,
@@ -1004,11 +1007,10 @@ pub(super) fn apply_button_chrome(btn: &NSButton, props: &PropMap) {
                 let bezel = button_bezel_from_props(props);
                 // Untitled overlay buttons skip rescaling (full-row hit targets).
                 let title_empty = btn.title().to_string().trim().is_empty();
-                if title_empty
-                    && matches!(bezel, NSBezelStyle::Toolbar | NSBezelStyle::Glass)
-                {
-                    let cfg =
-                        NSImageSymbolConfiguration::configurationWithScale(NSImageSymbolScale::Small);
+                if title_empty && matches!(bezel, NSBezelStyle::Toolbar | NSBezelStyle::Glass) {
+                    let cfg = NSImageSymbolConfiguration::configurationWithScale(
+                        NSImageSymbolScale::Small,
+                    );
                     im.imageWithSymbolConfiguration(&cfg).unwrap_or(im)
                 } else if !title_empty
                     && (matches!(
@@ -1016,8 +1018,9 @@ pub(super) fn apply_button_chrome(btn: &NSButton, props: &PropMap) {
                         NSBezelStyle::AccessoryBar | NSBezelStyle::AccessoryBarAction
                     ) || bezel == BEZEL_SHADOWLESS_SQUARE)
                 {
-                    let cfg =
-                        NSImageSymbolConfiguration::configurationWithScale(NSImageSymbolScale::Small);
+                    let cfg = NSImageSymbolConfiguration::configurationWithScale(
+                        NSImageSymbolScale::Small,
+                    );
                     im.imageWithSymbolConfiguration(&cfg).unwrap_or(im)
                 } else {
                     im
@@ -1048,8 +1051,8 @@ pub(super) fn apply_button_chrome(btn: &NSButton, props: &PropMap) {
                 btn.setBordered(bordered);
             }
             if !has_title && matches!(bezel_now, NSBezelStyle::Circular) {
-                let bordered = props_opt_bool(props, &["bordered", "buttonBordered"])
-                    .unwrap_or(true);
+                let bordered =
+                    props_opt_bool(props, &["bordered", "buttonBordered"]).unwrap_or(true);
                 btn.setBordered(bordered);
             }
             if !has_title && bezel_now == BEZEL_SHADOWLESS_SQUARE {
@@ -1137,7 +1140,11 @@ pub(crate) fn scroll_scroller_right_gutter_from_props(props: &PropMap) -> f64 {
     .max(0.0)
 }
 
-pub(crate) fn tune_scroll_view_chrome(scroll: &NSScrollView, has_vertical: bool, has_horizontal: bool) {
+pub(crate) fn tune_scroll_view_chrome(
+    scroll: &NSScrollView,
+    has_vertical: bool,
+    has_horizontal: bool,
+) {
     scroll.setBorderType(NSBorderType::NoBorder);
     scroll.setAutohidesScrollers(true);
     if has_vertical && !has_horizontal {
@@ -1156,9 +1163,7 @@ pub(super) fn text_view_set_string_without_delegate_notice(
 ) {
     tv.setDelegate(None);
     tv.setString(&NSString::from_str(text));
-    tv.setDelegate(Some(ProtocolObject::from_ref(
-        &*ctx.text_view_delegate,
-    )));
+    tv.setDelegate(Some(ProtocolObject::from_ref(&*ctx.text_view_delegate)));
 }
 
 /// After layout/patch, re-tile the scroll view, restore the clip’s document offset (clamped to the
@@ -1224,9 +1229,12 @@ pub(super) fn resync_all_scroll_views_under(v: &NSView) {
 fn wire_on_click(props: &PropMap, btn: &NSButton, ctx: &BuildCtx) {
     if let Some(Value::Function(f)) = props.get("onClick").or_else(|| props.get("onclick")) {
         let f = f.clone();
-        let idx = register_click_handler(ctx.root_id, Rc::new(move || {
-            let _ = f.call(&[]);
-        })) as isize;
+        let idx = register_click_handler(
+            ctx.root_id,
+            Rc::new(move || {
+                let _ = f.call(&[]);
+            }),
+        ) as isize;
         btn.setTag(idx);
         unsafe {
             let p = Retained::as_ptr(&ctx.router).cast::<AnyObject>();
@@ -1442,10 +1450,7 @@ pub fn commit_vnode(
                     let fill_i = zstack_fill_child_index(&props, n);
                     let shell = FlippedDocumentView::new(
                         ctx.mtm,
-                        NSRect::new(
-                            CGPoint::ZERO,
-                            CGSize::new(iw.max(1.0), th.max(1.0)),
-                        ),
+                        NSRect::new(CGPoint::ZERO, CGSize::new(iw.max(1.0), th.max(1.0))),
                     );
                     shell.setAutoresizingMask(
                         NSAutoresizingMaskOptions::ViewWidthSizable
@@ -1478,7 +1483,11 @@ pub fn commit_vnode(
                     .max(0.0);
                     let dir = props_string(&props, &["direction", "orient"]).unwrap_or_default();
                     let scroll = NSScrollView::new(ctx.mtm);
-                    scroll.setDrawsBackground(props_bool(&props, &["drawsBackground", "draws_background"], false));
+                    scroll.setDrawsBackground(props_bool(
+                        &props,
+                        &["drawsBackground", "draws_background"],
+                        false,
+                    ));
                     scroll.setAutoresizingMask(
                         NSAutoresizingMaskOptions::ViewWidthSizable
                             | NSAutoresizingMaskOptions::ViewHeightSizable,
@@ -1611,9 +1620,7 @@ pub fn commit_vnode(
                         ) as isize;
                         tf.setTag(idx);
                         unsafe {
-                            tf.setDelegate(Some(ProtocolObject::from_ref(
-                                &*ctx.text_delegate,
-                            )));
+                            tf.setDelegate(Some(ProtocolObject::from_ref(&*ctx.text_delegate)));
                         }
                     }
                     let h = text_input_height(&tf, &props);
@@ -1639,9 +1646,7 @@ pub fn commit_vnode(
                         ) as isize;
                         tf.setTag(idx);
                         unsafe {
-                            tf.setDelegate(Some(ProtocolObject::from_ref(
-                                &*ctx.text_delegate,
-                            )));
+                            tf.setDelegate(Some(ProtocolObject::from_ref(&*ctx.text_delegate)));
                         }
                     }
                     let h = 24.0;
@@ -1664,9 +1669,12 @@ pub fn commit_vnode(
                         props.get("onChange").or_else(|| props.get("onToggle"))
                     {
                         let f = f.clone();
-                        let idx = register_bool_handler(ctx.root_id, Rc::new(move |b| {
-                            let _ = f.call(&[Value::Bool(b)]);
-                        })) as isize;
+                        let idx = register_bool_handler(
+                            ctx.root_id,
+                            Rc::new(move |b| {
+                                let _ = f.call(&[Value::Bool(b)]);
+                            }),
+                        ) as isize;
                         btn.setTag(idx);
                         unsafe {
                             let p = Retained::as_ptr(&ctx.router).cast::<AnyObject>();
@@ -1691,9 +1699,12 @@ pub fn commit_vnode(
                         props.get("onChange").or_else(|| props.get("onToggle"))
                     {
                         let f = f.clone();
-                        let idx = register_bool_handler(ctx.root_id, Rc::new(move |b| {
-                            let _ = f.call(&[Value::Bool(b)]);
-                        })) as isize;
+                        let idx = register_bool_handler(
+                            ctx.root_id,
+                            Rc::new(move |b| {
+                                let _ = f.call(&[Value::Bool(b)]);
+                            }),
+                        ) as isize;
                         sw.setTag(idx);
                         unsafe {
                             let p = Retained::as_ptr(&ctx.router).cast::<AnyObject>();
@@ -1718,9 +1729,12 @@ pub fn commit_vnode(
                         props.get("onChange").or_else(|| props.get("onInput"))
                     {
                         let f = f.clone();
-                        let idx = register_f64_handler(ctx.root_id, Rc::new(move |v| {
-                            let _ = f.call(&[Value::Number(v)]);
-                        })) as isize;
+                        let idx = register_f64_handler(
+                            ctx.root_id,
+                            Rc::new(move |v| {
+                                let _ = f.call(&[Value::Number(v)]);
+                            }),
+                        ) as isize;
                         sl.setTag(idx);
                         unsafe {
                             let p = Retained::as_ptr(&ctx.router).cast::<AnyObject>();
@@ -1773,9 +1787,12 @@ pub fn commit_vnode(
                         props.get("onChange").or_else(|| props.get("onInput"))
                     {
                         let f = f.clone();
-                        let idx = register_pick_handler(ctx.root_id, Rc::new(move |i| {
-                            let _ = f.call(&[Value::Number(i as f64)]);
-                        })) as isize;
+                        let idx = register_pick_handler(
+                            ctx.root_id,
+                            Rc::new(move |i| {
+                                let _ = f.call(&[Value::Number(i as f64)]);
+                            }),
+                        ) as isize;
                         popup.setTag(idx);
                         unsafe {
                             let p = Retained::as_ptr(&ctx.router).cast::<AnyObject>();
@@ -1804,11 +1821,14 @@ pub fn commit_vnode(
                         if let Some(Value::Function(f)) = props.get("onChange") {
                             let f = f.clone();
                             let ii = i as f64;
-                            let idx = register_bool_handler(ctx.root_id, Rc::new(move |on| {
-                                if on {
-                                    let _ = f.call(&[Value::Number(ii)]);
-                                }
-                            })) as isize;
+                            let idx = register_bool_handler(
+                                ctx.root_id,
+                                Rc::new(move |on| {
+                                    if on {
+                                        let _ = f.call(&[Value::Number(ii)]);
+                                    }
+                                }),
+                            ) as isize;
                             btn.setTag(idx);
                             unsafe {
                                 let p = Retained::as_ptr(&ctx.router).cast::<AnyObject>();
@@ -1827,7 +1847,8 @@ pub fn commit_vnode(
                 }
                 "image" => {
                     let src = props_string(&props, &["src", "path", "url"]).unwrap_or_default();
-                    let use_symbol = props_bool(&props, &["symbol", "sfSymbol", "sf_symbol"], false);
+                    let use_symbol =
+                        props_bool(&props, &["symbol", "sfSymbol", "sf_symbol"], false);
                     let img = if use_symbol {
                         let sym = NSString::from_str(&src);
                         NSImage::imageWithSystemSymbolName_accessibilityDescription(&sym, None)
@@ -1870,13 +1891,13 @@ pub fn commit_vnode(
                     pt + ih + pb
                 }
                 "tooltip" => {
-                    let tip = props_string(&props, &["title", "tooltip", "label"]).unwrap_or_default();
+                    let tip =
+                        props_string(&props, &["title", "tooltip", "label"]).unwrap_or_default();
                     let wrap = FlippedDocumentView::new(
                         ctx.mtm,
                         NSRect::new(CGPoint::ZERO, CGSize::new(iw.max(1.0), 0.0)),
                     );
-                    let wrap_ns: &NSView =
-                        unsafe { &*std::ptr::from_ref(&*wrap).cast::<NSView>() };
+                    let wrap_ns: &NSView = unsafe { &*std::ptr::from_ref(&*wrap).cast::<NSView>() };
                     if !tip.is_empty() {
                         wrap_ns.setToolTip(Some(&NSString::from_str(&tip)));
                     }
@@ -1897,16 +1918,18 @@ pub fn commit_vnode(
                 "list" => {
                     let th = scroll_outer_height(&props, avail_h);
                     let rows: Vec<String> = match props.get("rows") {
-                        Some(Value::Array(a)) => a
-                            .borrow()
-                            .iter()
-                            .map(|v| v.to_display_string())
-                            .collect(),
+                        Some(Value::Array(a)) => {
+                            a.borrow().iter().map(|v| v.to_display_string()).collect()
+                        }
                         _ => vec![],
                     };
                     let body = rows.join("\n");
                     let scroll = NSScrollView::new(ctx.mtm);
-                    scroll.setDrawsBackground(props_bool(&props, &["drawsBackground", "draws_background"], false));
+                    scroll.setDrawsBackground(props_bool(
+                        &props,
+                        &["drawsBackground", "draws_background"],
+                        false,
+                    ));
                     scroll.setHasVerticalScroller(true);
                     tune_scroll_view_chrome(&scroll, true, false);
                     strip_scroll_content_insets(&scroll);
@@ -1929,7 +1952,11 @@ pub fn commit_vnode(
                     let min_h = props_f64(&props, &["minHeight", "min_height"], 120.0);
                     let th = base_h.max(min_h);
                     let scroll = NSScrollView::new(ctx.mtm);
-                    scroll.setDrawsBackground(props_bool(&props, &["drawsBackground", "draws_background"], false));
+                    scroll.setDrawsBackground(props_bool(
+                        &props,
+                        &["drawsBackground", "draws_background"],
+                        false,
+                    ));
                     scroll.setHasVerticalScroller(true);
                     tune_scroll_view_chrome(&scroll, true, false);
                     strip_scroll_content_insets(&scroll);
@@ -1975,9 +2002,7 @@ pub fn commit_vnode(
                     place(&scroll, ix, iy, iw, th);
                     parent.addSubview(&scroll);
                     if has_change {
-                        tv.setDelegate(Some(ProtocolObject::from_ref(
-                            &*ctx.text_view_delegate,
-                        )));
+                        tv.setDelegate(Some(ProtocolObject::from_ref(&*ctx.text_view_delegate)));
                     }
                     sync_scroll_view_for_document(&scroll, &tv);
                     apply_scroll_content_right_gutter(
@@ -1991,7 +2016,11 @@ pub fn commit_vnode(
                     let min_h = props_f64(&props, &["minHeight", "min_height"], 120.0);
                     let th = base_h.max(min_h);
                     let scroll = NSScrollView::new(ctx.mtm);
-                    scroll.setDrawsBackground(props_bool(&props, &["drawsBackground", "draws_background"], false));
+                    scroll.setDrawsBackground(props_bool(
+                        &props,
+                        &["drawsBackground", "draws_background"],
+                        false,
+                    ));
                     scroll.setHasVerticalScroller(true);
                     tune_scroll_view_chrome(&scroll, true, false);
                     strip_scroll_content_insets(&scroll);
@@ -2201,8 +2230,7 @@ pub fn commit_vnode(
                         ctx.mtm,
                         NSRect::new(CGPoint::ZERO, CGSize::new(iw.max(1.0), 0.0)),
                     );
-                    let boxv_ns: &NSView =
-                        unsafe { &*std::ptr::from_ref(&*boxv).cast::<NSView>() };
+                    let boxv_ns: &NSView = unsafe { &*std::ptr::from_ref(&*boxv).cast::<NSView>() };
                     let mut y = 0.0;
                     let mut hsum = 0.0;
                     let h_child = if children.len() == 1 { avail_h } else { None };
@@ -2220,7 +2248,8 @@ pub fn commit_vnode(
             }
         }
         _ => {
-            let tf = NSTextField::labelWithString(&NSString::from_str(&v.to_display_string()), ctx.mtm);
+            let tf =
+                NSTextField::labelWithString(&NSString::from_str(&v.to_display_string()), ctx.mtm);
             apply_static_label_text_field(&tf, &PropMap::default(), ctx.mtm);
             let h = single_line_label_height_after_style(&tf, &PropMap::default());
             place(&tf, x, y_top, avail_w, h);
@@ -2338,7 +2367,15 @@ pub(super) fn commit_sidebar_window_into(
 
     if let Some(p) = prev {
         if super::patch::try_patch_sidebar_vtree(
-            p, v, sidebar_root, detail_root, sw, sh, dw, dh, ctx,
+            p,
+            v,
+            sidebar_root,
+            detail_root,
+            sw,
+            sh,
+            dw,
+            dh,
+            ctx,
         )
         .is_some()
         {
@@ -2381,24 +2418,20 @@ mod sidebar_window_children_tests {
     use std::sync::Arc;
 
     pub(super) use tishlang_apple_common::style::{props_bool, props_f64, props_string};
-use tishlang_core::{ObjectMap, PropMap, Value};
+    use tishlang_core::{ObjectMap, PropMap, Value};
 
-fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
-    pm.iter()
-        .map(|(k, v)| (std::sync::Arc::clone(k), v.clone()))
-        .collect()
-}
-
+    fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
+        pm.iter()
+            .map(|(k, v)| (std::sync::Arc::clone(k), v.clone()))
+            .collect()
+    }
 
     use super::sidebar_window_children;
 
     fn vnode(tag: &str, children: Vec<Value>) -> Value {
         let mut m = ObjectMap::default();
         m.insert(Arc::from("tag"), Value::String(tag.into()));
-        m.insert(
-            Arc::from("children"),
-            Value::array(children),
-        );
+        m.insert(Arc::from("children"), Value::array(children));
         m.insert(Arc::from("props"), Value::Null);
         m.insert(Arc::from("_el"), Value::Null);
         Value::object(m)
@@ -2435,24 +2468,20 @@ mod split_pane_vnodes_tests {
     use std::sync::Arc;
 
     pub(super) use tishlang_apple_common::style::{props_bool, props_f64, props_string};
-use tishlang_core::{ObjectMap, PropMap, Value};
+    use tishlang_core::{ObjectMap, PropMap, Value};
 
-fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
-    pm.iter()
-        .map(|(k, v)| (std::sync::Arc::clone(k), v.clone()))
-        .collect()
-}
-
+    fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
+        pm.iter()
+            .map(|(k, v)| (std::sync::Arc::clone(k), v.clone()))
+            .collect()
+    }
 
     use super::split_pane_vnodes;
 
     fn vnode(tag: &str) -> Value {
         let mut m = ObjectMap::default();
         m.insert(Arc::from("tag"), Value::String(tag.into()));
-        m.insert(
-            Arc::from("children"),
-            Value::array(vec![]),
-        );
+        m.insert(Arc::from("children"), Value::array(vec![]));
         m.insert(Arc::from("props"), Value::Null);
         m.insert(Arc::from("_el"), Value::Null);
         Value::object(m)
@@ -2490,14 +2519,13 @@ mod effective_props_tests {
     use std::sync::Arc;
 
     pub(super) use tishlang_apple_common::style::{props_bool, props_f64, props_string};
-use tishlang_core::{ObjectMap, PropMap, Value};
+    use tishlang_core::{ObjectMap, PropMap, Value};
 
-fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
-    pm.iter()
-        .map(|(k, v)| (std::sync::Arc::clone(k), v.clone()))
-        .collect()
-}
-
+    fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
+        pm.iter()
+            .map(|(k, v)| (std::sync::Arc::clone(k), v.clone()))
+            .collect()
+    }
 
     use super::effective_props;
 
@@ -2518,10 +2546,7 @@ fn propmap_to_object_map(pm: &PropMap) -> ObjectMap {
             style_obj(&[("padding", Value::Number(8.0))]),
         );
         let e = effective_props(&raw);
-        assert_eq!(
-            e.get("padding").and_then(|v| v.as_number()),
-            Some(8.0)
-        );
+        assert_eq!(e.get("padding").and_then(|v| v.as_number()), Some(8.0));
     }
 
     #[test]

@@ -14,7 +14,10 @@ use tishlang_core::Value;
 use super::{arr, num_arg, obj, s, str_arg};
 
 pub(super) fn names(_a: &[Value]) -> Value {
-    arr(NSTimeZone::knownTimeZoneNames().iter().map(|n| s(&n.to_string())).collect())
+    arr(NSTimeZone::knownTimeZoneNames()
+        .iter()
+        .map(|n| s(&n.to_string()))
+        .collect())
 }
 
 pub(super) fn local(_a: &[Value]) -> Value {
@@ -22,12 +25,24 @@ pub(super) fn local(_a: &[Value]) -> Value {
 }
 
 pub(super) fn at(args: &[Value]) -> Value {
-    let Some(tz) = NSTimeZone::timeZoneWithName(&NSString::from_str(&str_arg(args, 0))) else { return Value::Null };
+    let Some(tz) = NSTimeZone::timeZoneWithName(&NSString::from_str(&str_arg(args, 0))) else {
+        return Value::Null;
+    };
     let date = NSDate::dateWithTimeIntervalSince1970(num_arg(args, 1, 0.0));
-    let abbr = tz.abbreviationForDate(&date).map(|x| x.to_string()).unwrap_or_default();
-    obj(vec![("offset", Value::Number(tz.secondsFromGMTForDate(&date) as f64)), ("abbreviation", s(&abbr))])
+    let abbr = tz
+        .abbreviationForDate(&date)
+        .map(|x| x.to_string())
+        .unwrap_or_default();
+    obj(vec![
+        (
+            "offset",
+            Value::Number(tz.secondsFromGMTForDate(&date) as f64),
+        ),
+        ("abbreviation", s(&abbr)),
+    ])
 }
 
 pub(super) fn by_abbreviation(args: &[Value]) -> Value {
-    NSTimeZone::timeZoneWithAbbreviation(&NSString::from_str(&str_arg(args, 0))).map_or(Value::Null, |tz| s(&tz.name().to_string()))
+    NSTimeZone::timeZoneWithAbbreviation(&NSString::from_str(&str_arg(args, 0)))
+        .map_or(Value::Null, |tz| s(&tz.name().to_string()))
 }

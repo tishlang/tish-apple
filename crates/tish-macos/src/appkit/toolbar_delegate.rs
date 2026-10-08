@@ -81,10 +81,7 @@ define_class!(
             if let Some(item) = custom {
                 item
             } else {
-                NSToolbarItem::initWithItemIdentifier(
-                    NSToolbarItem::alloc(mtm),
-                    item_identifier,
-                )
+                NSToolbarItem::initWithItemIdentifier(NSToolbarItem::alloc(mtm), item_identifier)
             }
         }
 
@@ -116,13 +113,10 @@ impl TishToolbarDelegate {
         slot_idx: usize,
         router: Option<&Retained<MacosControlRouter>>,
     ) -> Retained<NSToolbarItem> {
-        let item = NSToolbarItem::initWithItemIdentifier(
-            NSToolbarItem::alloc(mtm),
-            item_identifier,
-        );
+        let item =
+            NSToolbarItem::initWithItemIdentifier(NSToolbarItem::alloc(mtm), item_identifier);
         let sym = NSString::from_str(symbol);
-        if let Some(im) = NSImage::imageWithSystemSymbolName_accessibilityDescription(&sym, None)
-        {
+        if let Some(im) = NSImage::imageWithSystemSymbolName_accessibilityDescription(&sym, None) {
             let cfg = NSImageSymbolConfiguration::configurationWithScale(NSImageSymbolScale::Small);
             let im2 = im.imageWithSymbolConfiguration(&cfg).unwrap_or(im);
             item.setImage(Some(&im2));

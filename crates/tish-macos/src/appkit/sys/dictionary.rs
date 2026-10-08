@@ -10,9 +10,9 @@
 use std::ffi::{c_char, c_void, CString};
 use std::sync::OnceLock;
 
+use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2::msg_send;
 use objc2_foundation::{NSArray, NSString};
 
 type Ptr = *const c_void;
@@ -40,8 +40,12 @@ fn lookup_first(word: &str) -> Option<String> {
         return None;
     }
     let text = NSString::from_str(word);
-    let range = CFRange { location: 0, length: text.length() as isize };
-    let raw = unsafe { DCSCopyTextDefinition(std::ptr::null(), Retained::as_ptr(&text).cast(), range) };
+    let range = CFRange {
+        location: 0,
+        length: text.length() as isize,
+    };
+    let raw =
+        unsafe { DCSCopyTextDefinition(std::ptr::null(), Retained::as_ptr(&text).cast(), range) };
     // +1 CFString, toll-free bridged to NSString.
     let def = unsafe { Retained::from_raw(raw as *mut NSString) }?;
     Some(def.to_string())
@@ -57,19 +61,30 @@ struct Records {
 /// `DCSRecordCopyData` version that returns the same plain text as `DCSCopyTextDefinition`.
 const RECORD_TEXT: i64 = 3;
 /// The dictionary `DCSCopyTextDefinition` answers from, first one found.
-const DICTIONARIES: &[&str] = &["New Oxford American Dictionary", "Oxford Dictionary of English"];
+const DICTIONARIES: &[&str] = &[
+    "New Oxford American Dictionary",
+    "Oxford Dictionary of English",
+];
 
 fn records() -> Option<&'static Records> {
     static RECORDS: OnceLock<Option<Records>> = OnceLock::new();
     RECORDS
         .get_or_init(|| unsafe {
-            let lib = CString::new("/System/Library/Frameworks/CoreServices.framework/CoreServices").ok()?;
+            let lib =
+                CString::new("/System/Library/Frameworks/CoreServices.framework/CoreServices")
+                    .ok()?;
             let h = dlopen(lib.as_ptr(), 1);
             if h.is_null() {
                 return None;
             }
-            let sym = |n: &str| CString::new(n).ok().map(|c| dlsym(h, c.as_ptr())).filter(|p| !p.is_null());
-            let available: extern "C" fn() -> Ptr = std::mem::transmute(sym("DCSCopyAvailableDictionaries")?);
+            let sym = |n: &str| {
+                CString::new(n)
+                    .ok()
+                    .map(|c| dlsym(h, c.as_ptr()))
+                    .filter(|p| !p.is_null())
+            };
+            let available: extern "C" fn() -> Ptr =
+                std::mem::transmute(sym("DCSCopyAvailableDictionaries")?);
             let name: extern "C" fn(Ptr) -> Ptr = std::mem::transmute(sym("DCSDictionaryGetName")?);
             let r = Records {
                 dictionary: 0,
@@ -90,7 +105,9 @@ fn records() -> Option<&'static Records> {
                     (cf_string(name(p)), p as usize)
                 })
                 .collect();
-            let dictionary = DICTIONARIES.iter().find_map(|want| named.iter().find(|(n, _)| n == want).map(|&(_, p)| p))?;
+            let dictionary = DICTIONARIES
+                .iter()
+                .find_map(|want| named.iter().find(|(n, _)| n == want).map(|&(_, p)| p))?;
             Some(Records { dictionary, ..r })
         })
         .as_ref()
@@ -111,9 +128,17 @@ fn lookup_all(word: &str) -> Vec<String> {
         return first.into_iter().collect();
     };
     // Records also match other words; keep the homographs of the entry the public call found.
-    let base = first.as_deref().map(|t| headword(t.split(" | ").next().unwrap_or(""), word)).unwrap_or_else(|| word.trim().to_string());
+    let base = first
+        .as_deref()
+        .map(|t| headword(t.split(" | ").next().unwrap_or(""), word))
+        .unwrap_or_else(|| word.trim().to_string());
     let query = NSString::from_str(word.trim());
-    let found = (r.search)(r.dictionary as Ptr, Retained::as_ptr(&query).cast(), std::ptr::null(), std::ptr::null());
+    let found = (r.search)(
+        r.dictionary as Ptr,
+        Retained::as_ptr(&query).cast(),
+        std::ptr::null(),
+        std::ptr::null(),
+    );
     let Some(found) = (unsafe { Retained::from_raw(found as *mut NSArray<AnyObject>) }) else {
         return first.into_iter().collect();
     };
@@ -123,7 +148,9 @@ fn lookup_all(word: &str) -> Vec<String> {
         if !cf_string((r.headword)(p)).eq_ignore_ascii_case(&base) {
             continue;
         }
-        if let Some(t) = unsafe { Retained::from_raw((r.copy_data)(p, RECORD_TEXT) as *mut NSString) } {
+        if let Some(t) =
+            unsafe { Retained::from_raw((r.copy_data)(p, RECORD_TEXT) as *mut NSString) }
+        {
             out.push(t.to_string());
         }
     }
@@ -149,5 +176,10 @@ fn headword(head: &str, asked: &str) -> String {
 }
 
 pub(super) fn lookup(args: &[tishlang_core::Value]) -> tishlang_core::Value {
-    super::arr(lookup_all(&super::str_arg(args, 0)).iter().map(|t| super::s(t)).collect())
+    super::arr(
+        lookup_all(&super::str_arg(args, 0))
+            .iter()
+            .map(|t| super::s(t))
+            .collect(),
+    )
 }

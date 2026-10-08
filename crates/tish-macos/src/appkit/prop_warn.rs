@@ -24,9 +24,7 @@ pub(crate) fn macos_warn_unknown_props_enabled() -> bool {
 
 fn prop_key_allowed(key: &str, allowed: &[&str]) -> bool {
     let kl = key.to_ascii_lowercase();
-    allowed
-        .iter()
-        .any(|a| a.to_ascii_lowercase() == kl)
+    allowed.iter().any(|a| a.to_ascii_lowercase() == kl)
 }
 
 /// Log unknown keys in `props` for `tag` once per `(tag, key)` pair.

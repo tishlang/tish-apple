@@ -15,7 +15,9 @@ pub(crate) fn attributed_string_from_markdown(
     markdown: &str,
 ) -> Retained<NSAttributedString> {
     let opts = NSAttributedStringMarkdownParsingOptions::new();
-    opts.setFailurePolicy(NSAttributedStringMarkdownParsingFailurePolicy::ReturnPartiallyParsedIfPossible);
+    opts.setFailurePolicy(
+        NSAttributedStringMarkdownParsingFailurePolicy::ReturnPartiallyParsedIfPossible,
+    );
     opts.setInterpretedSyntax(NSAttributedStringMarkdownInterpretedSyntax::Full);
     let ns_md = NSString::from_str(markdown);
     let allocated = NSAttributedString::alloc();

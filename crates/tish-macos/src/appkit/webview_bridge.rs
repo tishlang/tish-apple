@@ -15,7 +15,7 @@ use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, ProtocolObject};
 use objc2::{define_class, msg_send, DefinedClass, MainThreadMarker, MainThreadOnly};
-use objc2_foundation::{NSObject, NSObjectProtocol, NSString, NSURL, NSURLRequest};
+use objc2_foundation::{NSObject, NSObjectProtocol, NSString, NSURLRequest, NSURL};
 use objc2_web_kit::{
     WKScriptMessage, WKScriptMessageHandler, WKUserContentController, WKUserScript,
     WKUserScriptInjectionTime, WKWebView, WKWebViewConfiguration,
@@ -155,11 +155,8 @@ fn handle_bridge_message(surface_id: &str, text: &str) {
                 .unwrap_or("")
                 .to_string();
             let args = json_to_value(v.get("args").cloned().unwrap_or(serde_json::Value::Null));
-            let handler = BRIDGES.with(|m| {
-                m.borrow()
-                    .get(surface_id)
-                    .and_then(|e| e.on_invoke.clone())
-            });
+            let handler =
+                BRIDGES.with(|m| m.borrow().get(surface_id).and_then(|e| e.on_invoke.clone()));
             let result = if let Some(h) = handler {
                 h(cmd, args)
             } else {
@@ -181,12 +178,10 @@ fn handle_bridge_message(surface_id: &str, text: &str) {
                 .and_then(|x| x.as_str())
                 .unwrap_or("")
                 .to_string();
-            let payload = json_to_value(v.get("payload").cloned().unwrap_or(serde_json::Value::Null));
-            let handler = BRIDGES.with(|m| {
-                m.borrow()
-                    .get(surface_id)
-                    .and_then(|e| e.on_emit.clone())
-            });
+            let payload =
+                json_to_value(v.get("payload").cloned().unwrap_or(serde_json::Value::Null));
+            let handler =
+                BRIDGES.with(|m| m.borrow().get(surface_id).and_then(|e| e.on_emit.clone()));
             if let Some(h) = handler {
                 h(event, payload);
             }
@@ -200,9 +195,7 @@ fn handle_bridge_message(surface_id: &str, text: &str) {
 fn reply_invoke(surface_id: &str, id: &str, ok: bool, value: &Value) {
     let json = value_to_json_string(value);
     let id_js = serde_json::to_string(id).unwrap_or_else(|_| "\"\"".into());
-    let js = format!(
-        "window.__TISH_APP__&&window.__TISH_APP__.__resolve({id_js},{ok},{json});"
-    );
+    let js = format!("window.__TISH_APP__&&window.__TISH_APP__.__resolve({id_js},{ok},{json});");
     let _ = evaluate_js(surface_id, &js);
 }
 
@@ -232,9 +225,7 @@ pub fn create_webview(
 
     let mut boot = String::from(BOOTSTRAP_JS);
     let sid_js = serde_json::to_string(&surface_id).unwrap_or_else(|_| "\"wk\"".into());
-    boot.push_str(&format!(
-        "\nwindow.__TISH_SURFACE_ID__={sid_js};\n"
-    ));
+    boot.push_str(&format!("\nwindow.__TISH_SURFACE_ID__={sid_js};\n"));
     let src = NSString::from_str(&boot);
     let script = unsafe {
         WKUserScript::initWithSource_injectionTime_forMainFrameOnly(
@@ -248,9 +239,8 @@ pub fn create_webview(
         ucc.addUserScript(&script);
     }
 
-    let wv = unsafe {
-        WKWebView::initWithFrame_configuration(WKWebView::alloc(mtm), frame, &config)
-    };
+    let wv =
+        unsafe { WKWebView::initWithFrame_configuration(WKWebView::alloc(mtm), frame, &config) };
 
     let on_invoke = prop_invoke_handler(props);
     let on_emit = prop_emit_handler(props);
@@ -320,11 +310,7 @@ pub fn list_ids() -> Vec<String> {
     BRIDGES.with(|m| m.borrow().keys().cloned().collect())
 }
 
-pub fn load_content(
-    surface_id: &str,
-    url: Option<&str>,
-    html: Option<&str>,
-) -> Result<(), String> {
+pub fn load_content(surface_id: &str, url: Option<&str>, html: Option<&str>) -> Result<(), String> {
     let wv = BRIDGES.with(|m| m.borrow().get(surface_id).map(|e| e.webview.clone()));
     let Some(wv) = wv else {
         return Err(format!("no bridged webview for surfaceId={surface_id}"));
@@ -364,9 +350,8 @@ pub fn post_event_json(
 ) -> Result<(), String> {
     let event_js = serde_json::to_string(event).unwrap_or_else(|_| "\"\"".into());
     let payload_js = serde_json::to_string(payload).unwrap_or_else(|_| "null".into());
-    let js = format!(
-        "window.__TISH_APP__&&window.__TISH_APP__.__dispatch({event_js},{payload_js});"
-    );
+    let js =
+        format!("window.__TISH_APP__&&window.__TISH_APP__.__dispatch({event_js},{payload_js});");
     evaluate_js(surface_id, &js)
 }
 
@@ -379,7 +364,9 @@ pub fn broker_try_invoke(
     match cmd {
         "webview.list" => {
             let labels = list_ids();
-            Some(Ok(json!({ "ok": true, "labels": labels, "surfaceIds": labels })))
+            Some(Ok(
+                json!({ "ok": true, "labels": labels, "surfaceIds": labels }),
+            ))
         }
         "webview.eval" => {
             let sid = match surface_id_arg(args) {
@@ -452,12 +439,14 @@ pub fn evaluate_js(surface_id: &str, js: &str) -> Result<(), String> {
         return Err(format!("no bridged webview for surfaceId={surface_id}"));
     };
     let ns = NSString::from_str(js);
-    let block = RcBlock::new(|_obj: *mut AnyObject, err: *mut objc2_foundation::NSError| {
-        if !err.is_null() {
-            // Best-effort log; avoid panicking in ObjC callback.
-            eprintln!("tish-macos: evaluateJavaScript error");
-        }
-    });
+    let block = RcBlock::new(
+        |_obj: *mut AnyObject, err: *mut objc2_foundation::NSError| {
+            if !err.is_null() {
+                // Best-effort log; avoid panicking in ObjC callback.
+                eprintln!("tish-macos: evaluateJavaScript error");
+            }
+        },
+    );
     unsafe {
         wv.evaluateJavaScript_completionHandler(&ns, Some(&*block));
     }
@@ -467,9 +456,8 @@ pub fn evaluate_js(surface_id: &str, js: &str) -> Result<(), String> {
 pub fn post_event(surface_id: &str, event: &str, payload: &Value) -> Result<(), String> {
     let event_js = serde_json::to_string(event).unwrap_or_else(|_| "\"\"".into());
     let payload_js = value_to_json_string(payload);
-    let js = format!(
-        "window.__TISH_APP__&&window.__TISH_APP__.__dispatch({event_js},{payload_js});"
-    );
+    let js =
+        format!("window.__TISH_APP__&&window.__TISH_APP__.__dispatch({event_js},{payload_js});");
     evaluate_js(surface_id, &js)
 }
 
@@ -533,7 +521,9 @@ fn prop_fn(props: &tishlang_core::PropMap, keys: &[&str]) -> Option<Value> {
     None
 }
 
-fn prop_invoke_handler(props: &tishlang_core::PropMap) -> Option<Rc<dyn Fn(String, Value) -> Value>> {
+fn prop_invoke_handler(
+    props: &tishlang_core::PropMap,
+) -> Option<Rc<dyn Fn(String, Value) -> Value>> {
     let f = prop_fn(props, &["onBridgeInvoke", "on_bridge_invoke", "onInvoke"])?;
     let Value::Function(func) = f else {
         return None;
@@ -565,9 +555,7 @@ fn json_to_value(v: serde_json::Value) -> Value {
         serde_json::Value::Bool(b) => Value::Bool(b),
         serde_json::Value::Number(n) => Value::Number(n.as_f64().unwrap_or(0.0)),
         serde_json::Value::String(s) => Value::String(s.into()),
-        serde_json::Value::Array(a) => {
-            Value::array(a.into_iter().map(json_to_value).collect())
-        }
+        serde_json::Value::Array(a) => Value::array(a.into_iter().map(json_to_value).collect()),
         serde_json::Value::Object(map) => {
             let mut o = ObjectMap::default();
             for (k, v) in map {

@@ -6,8 +6,8 @@ use objc2::rc::Retained;
 use objc2::ClassType;
 use objc2::MainThreadMarker;
 use objc2_app_kit::{
-    NSAutoresizingMaskOptions, NSControlSize, NSUserInterfaceItemIdentification, NSView,
-    NSWindowOrderingMode, NSScroller, NSScrollerStyle, NSScrollView,
+    NSAutoresizingMaskOptions, NSControlSize, NSScrollView, NSScroller, NSScrollerStyle,
+    NSUserInterfaceItemIdentification, NSView, NSWindowOrderingMode,
 };
 use objc2_core_foundation::{CGFloat, CGPoint, CGSize};
 use objc2_foundation::{NSObjectProtocol, NSRect, NSString};
@@ -131,11 +131,7 @@ pub fn zstack_try_embed_grouped_table_header(shell: &NSView) {
 
     header.removeFromSuperview();
     let clip = scroll.contentView();
-    scroll.addSubview_positioned_relativeTo(
-        header,
-        NSWindowOrderingMode::Above,
-        Some(&*clip),
-    );
+    scroll.addSubview_positioned_relativeTo(header, NSWindowOrderingMode::Above, Some(&*clip));
     reposition_embedded_header_in_scroll(scroll, header);
     scroll.layoutSubtreeIfNeeded();
 }

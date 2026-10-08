@@ -5,9 +5,9 @@
 
 use std::ffi::{c_char, c_void, CStr, CString};
 
+use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2::msg_send;
 use objc2_foundation::{NSArray, NSProcessInfo, NSString, NSURL};
 
 type CFTypeRef = *const c_void;
@@ -25,7 +25,13 @@ extern "C" {
 }
 
 extern "C" {
-    fn sysctlbyname(name: *const c_char, old: *mut c_void, oldlen: *mut usize, new: *const c_void, newlen: usize) -> i32;
+    fn sysctlbyname(
+        name: *const c_char,
+        old: *mut c_void,
+        oldlen: *mut usize,
+        new: *const c_void,
+        newlen: usize,
+    ) -> i32;
 }
 
 #[derive(Default)]
@@ -52,17 +58,36 @@ struct Info {
 }
 
 fn sysctl_string(name: &str) -> String {
-    let Ok(c) = CString::new(name) else { return String::new() };
+    let Ok(c) = CString::new(name) else {
+        return String::new();
+    };
     let mut len = 0usize;
     unsafe {
-        if sysctlbyname(c.as_ptr(), std::ptr::null_mut(), &mut len, std::ptr::null(), 0) != 0 || len == 0 {
+        if sysctlbyname(
+            c.as_ptr(),
+            std::ptr::null_mut(),
+            &mut len,
+            std::ptr::null(),
+            0,
+        ) != 0
+            || len == 0
+        {
             return String::new();
         }
         let mut buf = vec![0u8; len];
-        if sysctlbyname(c.as_ptr(), buf.as_mut_ptr() as *mut c_void, &mut len, std::ptr::null(), 0) != 0 {
+        if sysctlbyname(
+            c.as_ptr(),
+            buf.as_mut_ptr() as *mut c_void,
+            &mut len,
+            std::ptr::null(),
+            0,
+        ) != 0
+        {
             return String::new();
         }
-        CStr::from_bytes_until_nul(&buf).map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
+        CStr::from_bytes_until_nul(&buf)
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default()
     }
 }
 
@@ -83,13 +108,20 @@ unsafe fn string(dict: &AnyObject, key: &str) -> String {
         return String::new();
     }
     let s: *mut NSString = msg_send![&*v, description];
-    if s.is_null() { String::new() } else { (*s).to_string() }
+    if s.is_null() {
+        String::new()
+    } else {
+        (*s).to_string()
+    }
 }
 
 fn volume() -> (u64, u64) {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/".into());
     let url = NSURL::fileURLWithPath(&NSString::from_str(&home));
-    let keys = ["NSURLVolumeTotalCapacityKey", "NSURLVolumeAvailableCapacityForImportantUsageKey"];
+    let keys = [
+        "NSURLVolumeTotalCapacityKey",
+        "NSURLVolumeAvailableCapacityForImportantUsageKey",
+    ];
     let names: Vec<Retained<NSString>> = keys.iter().map(|k| NSString::from_str(k)).collect();
     let list = NSArray::from_retained_slice(&names);
     unsafe {

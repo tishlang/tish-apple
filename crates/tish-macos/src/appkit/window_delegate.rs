@@ -13,9 +13,9 @@
 
 use std::cell::{Cell, RefCell};
 
+use dispatch2::{DispatchQueue, DispatchTime};
 use objc2::rc::Retained;
 use objc2::{define_class, msg_send, DefinedClass, MainThreadMarker, MainThreadOnly};
-use dispatch2::{DispatchQueue, DispatchTime};
 use objc2_app_kit::{NSWindow, NSWindowDelegate};
 use objc2_foundation::{NSNotification, NSObject, NSObjectProtocol};
 use tishlang_core::{ObjectMap, PropMap, Value};

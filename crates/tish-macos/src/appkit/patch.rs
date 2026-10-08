@@ -8,40 +8,40 @@ use objc2::{sel, AnyThread, ClassType};
 use objc2_app_kit::{
     NSAutoresizingMaskOptions, NSBox, NSButton, NSColor, NSControlStateValueOff,
     NSControlStateValueOn, NSFont, NSImage, NSImageScaling, NSImageSymbolConfiguration,
-    NSImageSymbolScale, NSImageView, NSProgressIndicator,
-    NSPopUpButton, NSScrollView, NSSecureTextField, NSSlider,
-    NSSplitView, NSSwitch, NSTabView, NSTextField, NSTextView, NSVisualEffectView, NSView,
+    NSImageSymbolScale, NSImageView, NSPopUpButton, NSProgressIndicator, NSScrollView,
+    NSSecureTextField, NSSlider, NSSplitView, NSSwitch, NSTabView, NSTextField, NSTextView, NSView,
+    NSVisualEffectView,
 };
 use objc2_core_foundation::{CGFloat, CGSize};
-use objc2_foundation::{NSObjectProtocol, NSString, NSURL, NSURLRequest};
+use objc2_foundation::{NSObjectProtocol, NSString, NSURLRequest, NSURL};
 use objc2_web_kit::WKWebView;
 use tishlang_core::{ObjectMap, PropMap, Value};
 use tishlang_ui::runtime::is_fragment_tag;
 
 use super::build::{
-    apply_button_chrome, effective_props, freeze_autoresizing_for_manual_frames, last_element_child_index,
-    options_strings, padding_insets, place, place_visual_effect_document, props_bool, props_f64,
-    props_string, row_child_widths, row_cross_align, row_shell_outer_height,
-    row_shell_reposition_children, row_wants_click_overlay, RowCrossAlign, scroll_outer_height,
+    apply_button_chrome, apply_scroll_content_right_gutter, apply_scroll_scroller_top_inset,
+    apply_visual_effect_view_from_props, effective_props, freeze_autoresizing_for_manual_frames,
+    label_text_from_children, last_element_child_index, options_strings, padding_insets, place,
+    place_visual_effect_document, props_bool, props_f64, props_string, row_child_widths,
+    row_cross_align, row_shell_outer_height, row_shell_reposition_children,
+    row_wants_click_overlay, scroll_outer_height, scroll_scroller_right_gutter_from_props,
     split_divider_style, split_pane_layout, split_pane_vnodes, split_uses_vertical_divider,
-    visual_effect_intrinsic_outer_height, apply_scroll_content_right_gutter,
-    apply_scroll_scroller_top_inset, label_text_from_children, scroll_scroller_right_gutter_from_props,
-    sync_scroll_view_for_document, apply_visual_effect_view_from_props,
-    text_view_set_string_without_delegate_notice, vnode_children, vnode_props, BuildCtx,
+    sync_scroll_view_for_document, text_view_set_string_without_delegate_notice,
+    visual_effect_intrinsic_outer_height, vnode_children, vnode_props, BuildCtx, RowCrossAlign,
 };
-use super::flipped::{snap_flipped_split_panes_full_height, FlippedVisualEffectView};
-use super::style::{
-    apply_layer_style_to_view, apply_nstext_view_document_background_from_props,
-    apply_static_label_text_field, apply_text_input_chrome, has_container_layer_style, resolve_ns_color,
-    single_line_label_height_after_style, text_input_height,
-};
-use super::markdown_view::{apply_markdown_text_view_chrome, set_text_view_markdown};
 use super::canonical_host_tag;
+use super::flipped::{snap_flipped_split_panes_full_height, FlippedVisualEffectView};
 use super::handlers::{
     decode_control_tag, install_text_change_tag_on_text_view, register_bool_handler,
     register_click_handler, register_f64_handler, register_pick_handler,
     register_text_change_handler, text_change_tag_from_text_view, update_bool_handler,
     update_click_handler, update_f64_handler, update_pick_handler, update_text_change_handler,
+};
+use super::markdown_view::{apply_markdown_text_view_chrome, set_text_view_markdown};
+use super::style::{
+    apply_layer_style_to_view, apply_nstext_view_document_background_from_props,
+    apply_static_label_text_field, apply_text_input_chrome, has_container_layer_style,
+    resolve_ns_color, single_line_label_height_after_style, text_input_height,
 };
 fn wire_on_click_patch(props: &PropMap, btn: &NSButton, ctx: &BuildCtx, existing_tag: isize) {
     if let Some(Value::Function(f)) = props.get("onClick").or_else(|| props.get("onclick")) {
@@ -56,9 +56,12 @@ fn wire_on_click_patch(props: &PropMap, btn: &NSButton, ctx: &BuildCtx, existing
                 }),
             )
         } else {
-            register_click_handler(ctx.root_id, Rc::new(move || {
-                let _ = f.call(&[]);
-            }))
+            register_click_handler(
+                ctx.root_id,
+                Rc::new(move || {
+                    let _ = f.call(&[]);
+                }),
+            )
         };
         btn.setTag(idx);
         unsafe {
@@ -128,10 +131,8 @@ pub fn vnode_same_shape(a: &Value, b: &Value) -> bool {
             if ca == "row" {
                 let po = effective_props(&vnode_props(ma));
                 let pn = effective_props(&vnode_props(mb));
-                let shell_o =
-                    has_container_layer_style(&po) || row_wants_click_overlay(&po);
-                let shell_n =
-                    has_container_layer_style(&pn) || row_wants_click_overlay(&pn);
+                let shell_o = has_container_layer_style(&po) || row_wants_click_overlay(&po);
+                let shell_n = has_container_layer_style(&pn) || row_wants_click_overlay(&pn);
                 if shell_o != shell_n {
                     return false;
                 }
@@ -549,7 +550,11 @@ fn patch_vnode(
                         0.0,
                     )
                     .max(0.0);
-                    scroll.setDrawsBackground(props_bool(&props, &["drawsBackground", "draws_background"], false));
+                    scroll.setDrawsBackground(props_bool(
+                        &props,
+                        &["drawsBackground", "draws_background"],
+                        false,
+                    ));
                     place(scroll, ix, iy, iw, sh);
                     let doc = scroll.documentView().ok_or(())?;
                     if !doc.isFlipped() {
@@ -648,15 +653,16 @@ fn patch_vnode(
                                 }),
                             )
                         } else {
-                            register_text_change_handler(ctx.root_id, Rc::new(move |s: String| {
-                                let _ = f.call(&[Value::String(s.into())]);
-                            }))
+                            register_text_change_handler(
+                                ctx.root_id,
+                                Rc::new(move |s: String| {
+                                    let _ = f.call(&[Value::String(s.into())]);
+                                }),
+                            )
                         };
                         tf.setTag(idx);
                         unsafe {
-                            tf.setDelegate(Some(ProtocolObject::from_ref(
-                                &*ctx.text_delegate,
-                            )));
+                            tf.setDelegate(Some(ProtocolObject::from_ref(&*ctx.text_delegate)));
                         }
                     }
                     apply_text_input_chrome(tf, &props, ctx.mtm);
@@ -692,15 +698,16 @@ fn patch_vnode(
                                 }),
                             )
                         } else {
-                            register_text_change_handler(ctx.root_id, Rc::new(move |s: String| {
-                                let _ = f.call(&[Value::String(s.into())]);
-                            }))
+                            register_text_change_handler(
+                                ctx.root_id,
+                                Rc::new(move |s: String| {
+                                    let _ = f.call(&[Value::String(s.into())]);
+                                }),
+                            )
                         };
                         tf.setTag(idx);
                         unsafe {
-                            tf.setDelegate(Some(ProtocolObject::from_ref(
-                                &*ctx.text_delegate,
-                            )));
+                            tf.setDelegate(Some(ProtocolObject::from_ref(&*ctx.text_delegate)));
                         }
                     }
                     let h = 24.0;
@@ -737,9 +744,12 @@ fn patch_vnode(
                                 }),
                             )
                         } else {
-                            register_bool_handler(ctx.root_id, Rc::new(move |b| {
-                                let _ = f.call(&[Value::Bool(b)]);
-                            }))
+                            register_bool_handler(
+                                ctx.root_id,
+                                Rc::new(move |b| {
+                                    let _ = f.call(&[Value::Bool(b)]);
+                                }),
+                            )
                         };
                         btn.setTag(idx);
                         unsafe {
@@ -777,9 +787,12 @@ fn patch_vnode(
                                 }),
                             )
                         } else {
-                            register_bool_handler(ctx.root_id, Rc::new(move |b| {
-                                let _ = f.call(&[Value::Bool(b)]);
-                            }))
+                            register_bool_handler(
+                                ctx.root_id,
+                                Rc::new(move |b| {
+                                    let _ = f.call(&[Value::Bool(b)]);
+                                }),
+                            )
                         };
                         sw.setTag(idx);
                         unsafe {
@@ -817,9 +830,12 @@ fn patch_vnode(
                                 }),
                             )
                         } else {
-                            register_f64_handler(ctx.root_id, Rc::new(move |v| {
-                                let _ = f.call(&[Value::Number(v)]);
-                            }))
+                            register_f64_handler(
+                                ctx.root_id,
+                                Rc::new(move |v| {
+                                    let _ = f.call(&[Value::Number(v)]);
+                                }),
+                            )
                         };
                         sl.setTag(idx);
                         unsafe {
@@ -883,9 +899,12 @@ fn patch_vnode(
                                 }),
                             )
                         } else {
-                            register_pick_handler(ctx.root_id, Rc::new(move |i| {
-                                let _ = f.call(&[Value::Number(i as f64)]);
-                            }))
+                            register_pick_handler(
+                                ctx.root_id,
+                                Rc::new(move |i| {
+                                    let _ = f.call(&[Value::Number(i as f64)]);
+                                }),
+                            )
                         };
                         popup.setTag(idx);
                         unsafe {
@@ -933,11 +952,14 @@ fn patch_vnode(
                                     }),
                                 )
                             } else {
-                                register_bool_handler(ctx.root_id, Rc::new(move |on| {
-                                    if on {
-                                        let _ = f.call(&[Value::Number(ii)]);
-                                    }
-                                }))
+                                register_bool_handler(
+                                    ctx.root_id,
+                                    Rc::new(move |on| {
+                                        if on {
+                                            let _ = f.call(&[Value::Number(ii)]);
+                                        }
+                                    }),
+                                )
                             };
                             btn.setTag(idx);
                             unsafe {
@@ -959,7 +981,8 @@ fn patch_vnode(
                     let v = subview(parent, *slot).ok_or(())?;
                     let iv = unsafe { as_image_view(&*v).ok_or(())? };
                     let src = props_string(&props, &["src", "path", "url"]).unwrap_or_default();
-                    let use_symbol = props_bool(&props, &["symbol", "sfSymbol", "sf_symbol"], false);
+                    let use_symbol =
+                        props_bool(&props, &["symbol", "sfSymbol", "sf_symbol"], false);
                     let img = if use_symbol {
                         let sym = NSString::from_str(&src);
                         NSImage::imageWithSystemSymbolName_accessibilityDescription(&sym, None)
@@ -1038,7 +1061,11 @@ fn patch_vnode(
                     let scroll_view = subview(parent, *slot).ok_or(())?;
                     let scroll = unsafe { as_scroll(&*scroll_view).ok_or(())? };
                     let th = scroll_outer_height(&props, avail_h);
-                    scroll.setDrawsBackground(props_bool(&props, &["drawsBackground", "draws_background"], false));
+                    scroll.setDrawsBackground(props_bool(
+                        &props,
+                        &["drawsBackground", "draws_background"],
+                        false,
+                    ));
                     place(scroll, ix, iy, iw, th);
                     let doc = scroll.documentView().ok_or(())?;
                     if !doc.isKindOfClass(NSTextField::class()) {
@@ -1046,11 +1073,9 @@ fn patch_vnode(
                     }
                     let tf: &NSTextField = unsafe { &*(std::ptr::from_ref(&*doc).cast()) };
                     let rows: Vec<String> = match props.get("rows") {
-                        Some(Value::Array(a)) => a
-                            .borrow()
-                            .iter()
-                            .map(|v| v.to_display_string())
-                            .collect(),
+                        Some(Value::Array(a)) => {
+                            a.borrow().iter().map(|v| v.to_display_string()).collect()
+                        }
                         _ => vec![],
                     };
                     let body = rows.join("\n");
@@ -1071,7 +1096,11 @@ fn patch_vnode(
                     let base_h = scroll_outer_height(&props, avail_h);
                     let min_h = props_f64(&props, &["minHeight", "min_height"], 120.0);
                     let th = base_h.max(min_h);
-                    scroll.setDrawsBackground(props_bool(&props, &["drawsBackground", "draws_background"], false));
+                    scroll.setDrawsBackground(props_bool(
+                        &props,
+                        &["drawsBackground", "draws_background"],
+                        false,
+                    ));
                     place(scroll, ix, iy, iw, th);
                     let doc = scroll.documentView().ok_or(())?;
                     if !doc.isKindOfClass(NSTextView::class()) {
@@ -1105,14 +1134,15 @@ fn patch_vnode(
                                 }),
                             )
                         } else {
-                            register_text_change_handler(ctx.root_id, Rc::new(move |s: String| {
-                                let _ = f.call(&[Value::String(s.into())]);
-                            }))
+                            register_text_change_handler(
+                                ctx.root_id,
+                                Rc::new(move |s: String| {
+                                    let _ = f.call(&[Value::String(s.into())]);
+                                }),
+                            )
                         };
                         install_text_change_tag_on_text_view(tv, idx);
-                        tv.setDelegate(Some(ProtocolObject::from_ref(
-                            &*ctx.text_view_delegate,
-                        )));
+                        tv.setDelegate(Some(ProtocolObject::from_ref(&*ctx.text_view_delegate)));
                     }
                     let fs = props_f64(&props, &["fontSize", "font_size"], 13.0);
                     let font = NSFont::systemFontOfSize(fs as CGFloat);
@@ -1136,7 +1166,11 @@ fn patch_vnode(
                     let base_h = scroll_outer_height(&props, avail_h);
                     let min_h = props_f64(&props, &["minHeight", "min_height"], 120.0);
                     let th = base_h.max(min_h);
-                    scroll.setDrawsBackground(props_bool(&props, &["drawsBackground", "draws_background"], false));
+                    scroll.setDrawsBackground(props_bool(
+                        &props,
+                        &["drawsBackground", "draws_background"],
+                        false,
+                    ));
                     place(scroll, ix, iy, iw, th);
                     let doc = scroll.documentView().ok_or(())?;
                     if !doc.isKindOfClass(NSTextView::class()) {

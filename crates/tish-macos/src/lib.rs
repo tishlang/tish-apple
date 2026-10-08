@@ -151,10 +151,7 @@ pub fn macos_object() -> Value {
         h.insert(Arc::from("show"), show);
         h.insert(Arc::from("runEventLoop"), run_el);
         h.insert(Arc::from("spawnPeer"), spawn);
-        h.insert(
-            Arc::from("nsWindow"),
-            Value::object(ns),
-        );
+        h.insert(Arc::from("nsWindow"), Value::object(ns));
         Value::object(h)
     });
     let run_event_loop = Value::native(|_a: &[Value]| {
@@ -214,9 +211,7 @@ pub fn macos_object() -> Value {
     let macos_val = Value::object(macos_inner);
 
     let zero = Value::native(|_a: &[Value]| Value::Number(0.0));
-    let empty_title = Value::native(|_a: &[Value]| {
-        Value::String("".into())
-    });
+    let empty_title = Value::native(|_a: &[Value]| Value::String("".into()));
     let mut win = ObjectMap::default();
     win.insert(Arc::from("title"), empty_title);
     win.insert(Arc::from("setTitle"), noop.clone());
@@ -239,10 +234,7 @@ pub fn macos_object() -> Value {
 
     let mut root = ObjectMap::default();
     root.insert(Arc::from("macos"), macos_val);
-    root.insert(
-        Arc::from("app"),
-        Value::object(app_map),
-    );
+    root.insert(Arc::from("app"), Value::object(app_map));
     root.insert(Arc::from("window"), window_val);
     root.insert(
         Arc::from("useState"),

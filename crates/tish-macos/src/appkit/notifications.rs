@@ -119,9 +119,11 @@ pub fn request_permission() -> &'static str {
     let opts = UNAuthorizationOptions::Alert
         | UNAuthorizationOptions::Sound
         | UNAuthorizationOptions::Badge;
-    let block = RcBlock::new(|granted: objc2::runtime::Bool, _err: *mut objc2_foundation::NSError| {
-        AUTH_CACHE.store(if granted.as_bool() { 2 } else { 1 }, Ordering::Relaxed);
-    });
+    let block = RcBlock::new(
+        |granted: objc2::runtime::Bool, _err: *mut objc2_foundation::NSError| {
+            AUTH_CACHE.store(if granted.as_bool() { 2 } else { 1 }, Ordering::Relaxed);
+        },
+    );
     center.requestAuthorizationWithOptions_completionHandler(opts, &block);
     let cached = AUTH_CACHE.load(Ordering::Relaxed);
     if cached < 0 {
@@ -133,9 +135,8 @@ pub fn request_permission() -> &'static str {
 
 /// Dev / bare-binary fallback: show an AppKit alert instead of a system banner.
 fn show_alert_fallback(title: &str, body: &str) -> Result<(), String> {
-    let mtm = MainThreadMarker::new().ok_or_else(|| {
-        "notification fallback requires the main thread".to_string()
-    })?;
+    let mtm = MainThreadMarker::new()
+        .ok_or_else(|| "notification fallback requires the main thread".to_string())?;
     let alert = NSAlert::new(mtm);
     alert.setMessageText(&NSString::from_str(title));
     if !body.is_empty() {
@@ -156,9 +157,7 @@ pub fn show(title: &str, body: &str) -> Result<(), String> {
         let _ = request_permission();
     }
     if AUTH_CACHE.load(Ordering::Relaxed) == 1 {
-        return Err(
-            "notifications denied — enable them in System Settings → Notifications".into(),
-        );
+        return Err("notifications denied — enable them in System Settings → Notifications".into());
     }
     if AUTH_CACHE.load(Ordering::Relaxed) == 3 {
         return show_alert_fallback(title, body);
@@ -177,8 +176,7 @@ pub fn show(title: &str, body: &str) -> Result<(), String> {
             .map(|d| d.as_millis())
             .unwrap_or(0)
     ));
-    let request =
-        UNNotificationRequest::requestWithIdentifier_content_trigger(&id, &content, None);
+    let request = UNNotificationRequest::requestWithIdentifier_content_trigger(&id, &content, None);
 
     let Ok(center) = catch(AssertUnwindSafe(|| {
         UNUserNotificationCenter::currentNotificationCenter()

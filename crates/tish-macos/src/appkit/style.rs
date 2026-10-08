@@ -2,11 +2,13 @@
 
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
-use objc2_app_kit::{NSColor, NSFocusRingType, NSFont, NSTextAlignment, NSTextField, NSTextView, NSView};
-use objc2_foundation::NSString;
+use objc2_app_kit::{
+    NSColor, NSFocusRingType, NSFont, NSTextAlignment, NSTextField, NSTextView, NSView,
+};
 use objc2_core_foundation::CGFloat;
-use tishlang_apple_common::style::{props_bool, props_f64, props_string};
+use objc2_foundation::NSString;
 pub(super) use tishlang_apple_common::style::parse_hex_color;
+use tishlang_apple_common::style::{props_bool, props_f64, props_string};
 use tishlang_core::{PropMap, Value};
 
 /// Returns true if layer-backed view styling from merged props should apply.
@@ -25,9 +27,6 @@ pub(super) fn has_container_layer_style(props: &PropMap) -> bool {
         || props_string(props, &["borderColor"]).is_some()
 }
 
-
-
-
 /// Hex, basic keywords, and dynamic AppKit semantic colors (`label`, `controlAccent`, …).
 pub(super) fn resolve_ns_color(s: &str) -> Option<Retained<NSColor>> {
     let t = s.trim();
@@ -38,9 +37,15 @@ pub(super) fn resolve_ns_color(s: &str) -> Option<Retained<NSColor>> {
     }
     let lower = t.to_ascii_lowercase();
     match lower.as_str() {
-        "white" => Some(NSColor::colorWithSRGBRed_green_blue_alpha(1.0, 1.0, 1.0, 1.0)),
-        "black" => Some(NSColor::colorWithSRGBRed_green_blue_alpha(0.0, 0.0, 0.0, 1.0)),
-        "transparent" => Some(NSColor::colorWithSRGBRed_green_blue_alpha(0.0, 0.0, 0.0, 0.0)),
+        "white" => Some(NSColor::colorWithSRGBRed_green_blue_alpha(
+            1.0, 1.0, 1.0, 1.0,
+        )),
+        "black" => Some(NSColor::colorWithSRGBRed_green_blue_alpha(
+            0.0, 0.0, 0.0, 1.0,
+        )),
+        "transparent" => Some(NSColor::colorWithSRGBRed_green_blue_alpha(
+            0.0, 0.0, 0.0, 0.0,
+        )),
         "label" => Some(NSColor::labelColor()),
         "secondarylabel" | "secondary_label" => Some(NSColor::secondaryLabelColor()),
         "tertiarylabel" | "tertiary_label" => Some(NSColor::tertiaryLabelColor()),
@@ -122,7 +127,6 @@ pub(super) fn apply_nstext_view_document_background_from_props(tv: &NSTextView, 
     }
 }
 
-
 fn font_weight_from_props(props: &PropMap) -> f64 {
     match props.get("fontWeight") {
         Some(Value::Number(n)) => *n,
@@ -142,7 +146,11 @@ fn font_weight_from_props(props: &PropMap) -> f64 {
 
 /// Non-editable label fields: no bezel, no background fill, adapts to dark mode via `labelColor` when
 /// `style.color` is omitted.
-pub(super) fn apply_static_label_text_field(tf: &NSTextField, props: &PropMap, mtm: MainThreadMarker) {
+pub(super) fn apply_static_label_text_field(
+    tf: &NSTextField,
+    props: &PropMap,
+    mtm: MainThreadMarker,
+) {
     tf.setBezeled(false);
     tf.setEditable(false);
     tf.setDrawsBackground(false);
@@ -189,11 +197,18 @@ pub(super) fn apply_text_input_chrome(tf: &NSTextField, props: &PropMap, mtm: Ma
         tf.setBezeled(bezeled);
         tf.setBordered(bezeled);
         tf.setDrawsBackground(bezeled);
-        tf.setFocusRingType(if bezeled { NSFocusRingType::Default } else { NSFocusRingType::None });
+        tf.setFocusRingType(if bezeled {
+            NSFocusRingType::Default
+        } else {
+            NSFocusRingType::None
+        });
     }
     apply_text_style(tf, props, mtm);
     let want = props_string(props, &["placeholder"]).unwrap_or_default();
-    let cur = tf.placeholderString().map(|s| s.to_string()).unwrap_or_default();
+    let cur = tf
+        .placeholderString()
+        .map(|s| s.to_string())
+        .unwrap_or_default();
     if cur != want {
         let s = NSString::from_str(&want);
         tf.setPlaceholderString(if want.is_empty() { None } else { Some(&s) });

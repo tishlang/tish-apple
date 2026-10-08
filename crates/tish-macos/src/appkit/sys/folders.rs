@@ -14,7 +14,8 @@ use tishlang_core::Value;
 use super::{call, num_arg};
 
 type FSEventStreamRef = *mut c_void;
-type Callback = extern "C" fn(FSEventStreamRef, *mut c_void, usize, *mut c_void, *const u32, *const u64);
+type Callback =
+    extern "C" fn(FSEventStreamRef, *mut c_void, usize, *mut c_void, *const u32, *const u64);
 
 #[repr(C)]
 struct FSEventStreamContext {
@@ -47,7 +48,14 @@ thread_local! {
     static CALLBACKS: RefCell<Vec<Value>> = const { RefCell::new(Vec::new()) };
 }
 
-extern "C" fn on_events(_s: FSEventStreamRef, info: *mut c_void, _n: usize, _paths: *mut c_void, _flags: *const u32, _ids: *const u64) {
+extern "C" fn on_events(
+    _s: FSEventStreamRef,
+    info: *mut c_void,
+    _n: usize,
+    _paths: *mut c_void,
+    _flags: *const u32,
+    _ids: *const u64,
+) {
     // Delivered on the main queue (FSEventStreamSetDispatchQueue below), where CALLBACKS lives.
     let cb = CALLBACKS.with(|c| c.borrow().get(info as usize).cloned());
     if let Some(cb) = cb {
@@ -57,13 +65,27 @@ extern "C" fn on_events(_s: FSEventStreamRef, info: *mut c_void, _n: usize, _pat
 
 pub(super) fn watch(args: &[Value]) -> Value {
     let dirs: Vec<String> = match args.first() {
-        Some(Value::Array(a)) => a.borrow().iter().filter_map(|v| if let Value::String(x) = v { Some(x.to_string()) } else { None }).collect(),
+        Some(Value::Array(a)) => a
+            .borrow()
+            .iter()
+            .filter_map(|v| {
+                if let Value::String(x) = v {
+                    Some(x.to_string())
+                } else {
+                    None
+                }
+            })
+            .collect(),
         Some(Value::String(x)) => vec![x.to_string()],
         _ => Vec::new(),
     };
     let latency = num_arg(args, 1, 1.0).max(0.0);
     let cb = args.get(2).cloned().unwrap_or(Value::Null);
-    let existing: Vec<Retained<NSString>> = dirs.iter().filter(|d| std::path::Path::new(d).is_dir()).map(|d| NSString::from_str(d)).collect();
+    let existing: Vec<Retained<NSString>> = dirs
+        .iter()
+        .filter(|d| std::path::Path::new(d).is_dir())
+        .map(|d| NSString::from_str(d))
+        .collect();
     if existing.is_empty() {
         return Value::Bool(false);
     }
@@ -75,12 +97,29 @@ pub(super) fn watch(args: &[Value]) -> Value {
         c.len() - 1
     });
     unsafe {
-        let ctx = FSEventStreamContext { version: 0, info: index as *mut c_void, retain: ptr::null(), release: ptr::null(), copy_description: ptr::null() };
-        let stream = FSEventStreamCreate(ptr::null(), on_events, &ctx, Retained::as_ptr(&paths) as *const c_void, SINCE_NOW, latency, 0);
+        let ctx = FSEventStreamContext {
+            version: 0,
+            info: index as *mut c_void,
+            retain: ptr::null(),
+            release: ptr::null(),
+            copy_description: ptr::null(),
+        };
+        let stream = FSEventStreamCreate(
+            ptr::null(),
+            on_events,
+            &ctx,
+            Retained::as_ptr(&paths) as *const c_void,
+            SINCE_NOW,
+            latency,
+            0,
+        );
         if stream.is_null() {
             return Value::Bool(false);
         }
-        FSEventStreamSetDispatchQueue(stream, DispatchQueue::main() as *const DispatchQueue as *const c_void);
+        FSEventStreamSetDispatchQueue(
+            stream,
+            DispatchQueue::main() as *const DispatchQueue as *const c_void,
+        );
         Value::Bool(FSEventStreamStart(stream) != 0)
     }
 }

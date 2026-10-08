@@ -17,10 +17,13 @@
 
 use std::ffi::{c_char, c_void, CString};
 
+use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject};
-use objc2::msg_send;
-use objc2_app_kit::{NSApplicationActivationOptions, NSApplicationActivationPolicy, NSRunningApplication, NSWorkspace};
+use objc2_app_kit::{
+    NSApplicationActivationOptions, NSApplicationActivationPolicy, NSRunningApplication,
+    NSWorkspace,
+};
 use objc2_foundation::{NSArray, NSString, NSURL};
 
 extern "C" {
@@ -44,15 +47,21 @@ fn symbol(lib: &str, name: &str) -> Option<*mut c_void> {
 }
 
 pub fn lock_screen() -> Result<(), String> {
-    let f = symbol("/System/Library/PrivateFrameworks/login.framework/Versions/Current/login", "SACLockScreenImmediate")
-        .ok_or("cannot find SACLockScreenImmediate")?;
+    let f = symbol(
+        "/System/Library/PrivateFrameworks/login.framework/Versions/Current/login",
+        "SACLockScreenImmediate",
+    )
+    .ok_or("cannot find SACLockScreenImmediate")?;
     let f: extern "C" fn() -> i32 = unsafe { std::mem::transmute(f) };
     f();
     Ok(())
 }
 
 fn pmset(arg: &str) -> Result<(), String> {
-    let st = std::process::Command::new("/usr/bin/pmset").arg(arg).status().map_err(|e| e.to_string())?;
+    let st = std::process::Command::new("/usr/bin/pmset")
+        .arg(arg)
+        .status()
+        .map_err(|e| e.to_string())?;
     if st.success() {
         Ok(())
     } else {
@@ -78,7 +87,8 @@ fn apple_event(bundle: &str, class: &[u8; 4], id: &[u8; 4], wait: f64) -> Result
     let cls = AnyClass::get(c"NSAppleEventDescriptor").ok_or("no NSAppleEventDescriptor")?;
     let bundle = NSString::from_str(bundle);
     unsafe {
-        let target: Option<Retained<AnyObject>> = msg_send![cls, descriptorWithBundleIdentifier: &*bundle];
+        let target: Option<Retained<AnyObject>> =
+            msg_send![cls, descriptorWithBundleIdentifier: &*bundle];
         let target = target.ok_or("bad target")?;
         let ev: Option<Retained<AnyObject>> = msg_send![
             cls,
@@ -92,7 +102,8 @@ fn apple_event(bundle: &str, class: &[u8; 4], id: &[u8; 4], wait: f64) -> Result
         // kAENoReply = 1, kAEWaitReply = 3
         let options: usize = if wait > 0.0 { 3 } else { 1 };
         let mut err: *mut AnyObject = std::ptr::null_mut();
-        let reply: Option<Retained<AnyObject>> = msg_send![&*ev, sendEventWithOptions: options, timeout: wait.max(1.0), error: &mut err];
+        let reply: Option<Retained<AnyObject>> =
+            msg_send![&*ev, sendEventWithOptions: options, timeout: wait.max(1.0), error: &mut err];
         if reply.is_none() && !err.is_null() {
             let desc: Retained<NSString> = msg_send![err, localizedDescription];
             return Err(desc.to_string());
@@ -119,7 +130,9 @@ pub fn empty_trash() -> Result<(), String> {
 }
 
 pub fn screen_saver() -> bool {
-    let url = NSURL::fileURLWithPath(&NSString::from_str("/System/Library/CoreServices/ScreenSaverEngine.app"));
+    let url = NSURL::fileURLWithPath(&NSString::from_str(
+        "/System/Library/CoreServices/ScreenSaverEngine.app",
+    ));
     NSWorkspace::sharedWorkspace().openURL(&url)
 }
 
@@ -134,7 +147,8 @@ pub fn dark_mode() -> Option<bool> {
 }
 
 pub fn set_dark_mode(on: bool) -> Result<(), String> {
-    let f = symbol(SKYLIGHT, "SLSSetAppearanceThemeLegacy").ok_or("cannot change the appearance on this macOS")?;
+    let f = symbol(SKYLIGHT, "SLSSetAppearanceThemeLegacy")
+        .ok_or("cannot change the appearance on this macOS")?;
     let f: extern "C" fn(bool) = unsafe { std::mem::transmute(f) };
     f(on);
     Ok(())
@@ -151,17 +165,44 @@ struct PropertyAddress {
 
 #[link(name = "CoreAudio", kind = "framework")]
 extern "C" {
-    fn AudioObjectGetPropertyData(obj: u32, addr: *const PropertyAddress, qsize: u32, q: *const c_void, size: *mut u32, data: *mut c_void) -> i32;
-    fn AudioObjectSetPropertyData(obj: u32, addr: *const PropertyAddress, qsize: u32, q: *const c_void, size: u32, data: *const c_void) -> i32;
+    fn AudioObjectGetPropertyData(
+        obj: u32,
+        addr: *const PropertyAddress,
+        qsize: u32,
+        q: *const c_void,
+        size: *mut u32,
+        data: *mut c_void,
+    ) -> i32;
+    fn AudioObjectSetPropertyData(
+        obj: u32,
+        addr: *const PropertyAddress,
+        qsize: u32,
+        q: *const c_void,
+        size: u32,
+        data: *const c_void,
+    ) -> i32;
 }
 
 const SYSTEM_OBJECT: u32 = 1;
 
 fn output_device() -> Result<u32, String> {
-    let addr = PropertyAddress { selector: fourcc(b"dOut"), scope: fourcc(b"glob"), element: 0 };
+    let addr = PropertyAddress {
+        selector: fourcc(b"dOut"),
+        scope: fourcc(b"glob"),
+        element: 0,
+    };
     let mut dev: u32 = 0;
     let mut size = 4u32;
-    let st = unsafe { AudioObjectGetPropertyData(SYSTEM_OBJECT, &addr, 0, std::ptr::null(), &mut size, &mut dev as *mut u32 as *mut c_void) };
+    let st = unsafe {
+        AudioObjectGetPropertyData(
+            SYSTEM_OBJECT,
+            &addr,
+            0,
+            std::ptr::null(),
+            &mut size,
+            &mut dev as *mut u32 as *mut c_void,
+        )
+    };
     if st != 0 || dev == 0 {
         return Err("no sound output device".into());
     }
@@ -171,25 +212,64 @@ fn output_device() -> Result<u32, String> {
 /// Output volume 0–100 and mute.
 pub fn volume() -> Result<(f64, bool), String> {
     let dev = output_device()?;
-    let vol_addr = PropertyAddress { selector: fourcc(b"vmvc"), scope: fourcc(b"outp"), element: 0 };
+    let vol_addr = PropertyAddress {
+        selector: fourcc(b"vmvc"),
+        scope: fourcc(b"outp"),
+        element: 0,
+    };
     let mut v: f32 = 0.0;
     let mut size = 4u32;
-    let st = unsafe { AudioObjectGetPropertyData(dev, &vol_addr, 0, std::ptr::null(), &mut size, &mut v as *mut f32 as *mut c_void) };
+    let st = unsafe {
+        AudioObjectGetPropertyData(
+            dev,
+            &vol_addr,
+            0,
+            std::ptr::null(),
+            &mut size,
+            &mut v as *mut f32 as *mut c_void,
+        )
+    };
     if st != 0 {
         return Err("the output device has no volume control".into());
     }
-    let mute_addr = PropertyAddress { selector: fourcc(b"mute"), scope: fourcc(b"outp"), element: 0 };
+    let mute_addr = PropertyAddress {
+        selector: fourcc(b"mute"),
+        scope: fourcc(b"outp"),
+        element: 0,
+    };
     let mut m: u32 = 0;
     let mut size = 4u32;
-    let st = unsafe { AudioObjectGetPropertyData(dev, &mute_addr, 0, std::ptr::null(), &mut size, &mut m as *mut u32 as *mut c_void) };
+    let st = unsafe {
+        AudioObjectGetPropertyData(
+            dev,
+            &mute_addr,
+            0,
+            std::ptr::null(),
+            &mut size,
+            &mut m as *mut u32 as *mut c_void,
+        )
+    };
     Ok(((v as f64 * 100.0).round(), st == 0 && m != 0))
 }
 
 pub fn set_volume(percent: f64) -> Result<(), String> {
     let dev = output_device()?;
-    let addr = PropertyAddress { selector: fourcc(b"vmvc"), scope: fourcc(b"outp"), element: 0 };
+    let addr = PropertyAddress {
+        selector: fourcc(b"vmvc"),
+        scope: fourcc(b"outp"),
+        element: 0,
+    };
     let v = (percent.clamp(0.0, 100.0) / 100.0) as f32;
-    let st = unsafe { AudioObjectSetPropertyData(dev, &addr, 0, std::ptr::null(), 4, &v as *const f32 as *const c_void) };
+    let st = unsafe {
+        AudioObjectSetPropertyData(
+            dev,
+            &addr,
+            0,
+            std::ptr::null(),
+            4,
+            &v as *const f32 as *const c_void,
+        )
+    };
     if st != 0 {
         return Err("cannot set the volume of this output device".into());
     }
@@ -201,9 +281,22 @@ pub fn set_volume(percent: f64) -> Result<(), String> {
 
 pub fn set_mute(on: bool) -> Result<(), String> {
     let dev = output_device()?;
-    let addr = PropertyAddress { selector: fourcc(b"mute"), scope: fourcc(b"outp"), element: 0 };
+    let addr = PropertyAddress {
+        selector: fourcc(b"mute"),
+        scope: fourcc(b"outp"),
+        element: 0,
+    };
     let m: u32 = on as u32;
-    let st = unsafe { AudioObjectSetPropertyData(dev, &addr, 0, std::ptr::null(), 4, &m as *const u32 as *const c_void) };
+    let st = unsafe {
+        AudioObjectSetPropertyData(
+            dev,
+            &addr,
+            0,
+            std::ptr::null(),
+            4,
+            &m as *const u32 as *const c_void,
+        )
+    };
     if st != 0 {
         return Err("this output device cannot be muted".into());
     }
@@ -217,12 +310,21 @@ pub fn eject_all() -> (Vec<String>, Vec<String>) {
     let mut ejected = Vec::new();
     let mut failed = Vec::new();
     unsafe {
-        let Some(fm_cls) = AnyClass::get(c"NSFileManager") else { return (ejected, failed) };
+        let Some(fm_cls) = AnyClass::get(c"NSFileManager") else {
+            return (ejected, failed);
+        };
         let fm: Retained<AnyObject> = msg_send![fm_cls, defaultManager];
-        let keys = NSArray::from_retained_slice(&[NSString::from_str("NSURLVolumeIsEjectableKey"), NSString::from_str("NSURLVolumeIsRemovableKey"), NSString::from_str("NSURLVolumeIsInternalKey"), NSString::from_str("NSURLVolumeLocalizedNameKey")]);
+        let keys = NSArray::from_retained_slice(&[
+            NSString::from_str("NSURLVolumeIsEjectableKey"),
+            NSString::from_str("NSURLVolumeIsRemovableKey"),
+            NSString::from_str("NSURLVolumeIsInternalKey"),
+            NSString::from_str("NSURLVolumeLocalizedNameKey"),
+        ]);
         // NSVolumeEnumerationSkipHiddenVolumes = 2
         let urls: Option<Retained<NSArray<NSURL>>> = msg_send![&*fm, mountedVolumeURLsIncludingResourceValuesForKeys: &*keys, options: 2usize];
-        let Some(urls) = urls else { return (ejected, failed) };
+        let Some(urls) = urls else {
+            return (ejected, failed);
+        };
         let ws = NSWorkspace::sharedWorkspace();
         for i in 0..urls.count() {
             let url = urls.objectAtIndex(i);
@@ -230,19 +332,34 @@ pub fn eject_all() -> (Vec<String>, Vec<String>) {
                 let mut v: *mut AnyObject = std::ptr::null_mut();
                 let k = NSString::from_str(key);
                 let ok: bool = msg_send![&*url, getResourceValue: &mut v, forKey: &*k, error: std::ptr::null_mut::<*mut AnyObject>()];
-                ok && !v.is_null() && { let b: bool = msg_send![v, boolValue]; b }
+                ok && !v.is_null() && {
+                    let b: bool = msg_send![v, boolValue];
+                    b
+                }
             };
             let path = url.path().map(|p| p.to_string()).unwrap_or_default();
-            if path == "/" || !(flag("NSURLVolumeIsEjectableKey") || flag("NSURLVolumeIsRemovableKey") || (!flag("NSURLVolumeIsInternalKey") && path.starts_with("/Volumes/"))) {
+            if path == "/"
+                || !(flag("NSURLVolumeIsEjectableKey")
+                    || flag("NSURLVolumeIsRemovableKey")
+                    || (!flag("NSURLVolumeIsInternalKey") && path.starts_with("/Volumes/")))
+            {
                 continue;
             }
-            let name = std::path::Path::new(&path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or(path.clone());
+            let name = std::path::Path::new(&path)
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or(path.clone());
             let mut err: *mut AnyObject = std::ptr::null_mut();
             let ok: bool = msg_send![&*ws, unmountAndEjectDeviceAtURL: &*url, error: &mut err];
             if ok {
                 ejected.push(name);
             } else {
-                let why = if err.is_null() { "busy".to_string() } else { let d: Retained<NSString> = msg_send![err, localizedDescription]; d.to_string() };
+                let why = if err.is_null() {
+                    "busy".to_string()
+                } else {
+                    let d: Retained<NSString> = msg_send![err, localizedDescription];
+                    d.to_string()
+                };
                 failed.push(format!("{name}: {why}"));
             }
         }
@@ -280,14 +397,24 @@ pub fn running_apps() -> Vec<RunningApp> {
     let apps = NSWorkspace::sharedWorkspace().runningApplications();
     let mut out: Vec<RunningApp> = (0..apps.count())
         .map(|i| apps.objectAtIndex(i))
-        .filter(|a| a.activationPolicy() == NSApplicationActivationPolicy::Regular && a.processIdentifier() != me)
+        .filter(|a| {
+            a.activationPolicy() == NSApplicationActivationPolicy::Regular
+                && a.processIdentifier() != me
+        })
         .map(|a| {
             let pid = a.processIdentifier();
             RunningApp {
                 pid,
                 name: a.localizedName().map(|s| s.to_string()).unwrap_or_default(),
-                path: a.bundleURL().and_then(|u| u.path()).map(|p| p.to_string()).unwrap_or_default(),
-                bundle_id: a.bundleIdentifier().map(|s| s.to_string()).unwrap_or_default(),
+                path: a
+                    .bundleURL()
+                    .and_then(|u| u.path())
+                    .map(|p| p.to_string())
+                    .unwrap_or_default(),
+                bundle_id: a
+                    .bundleIdentifier()
+                    .map(|s| s.to_string())
+                    .unwrap_or_default(),
                 active: a.isActive(),
                 hidden: a.isHidden(),
                 memory: footprint(pid),
@@ -342,7 +469,10 @@ pub fn app_action(pid: i32, action: &str) -> Result<String, String> {
 /// Quit every app in the Dock but Finder (and this app). Returns how many were asked.
 pub fn quit_all() -> usize {
     let mut n = 0;
-    for a in running_apps().iter().filter(|a| a.bundle_id != "com.apple.finder") {
+    for a in running_apps()
+        .iter()
+        .filter(|a| a.bundle_id != "com.apple.finder")
+    {
         if app_by_pid(a.pid).is_some_and(|x| x.terminate()) {
             n += 1;
         }
@@ -371,13 +501,31 @@ fn flag(args: &[Value], i: usize) -> bool {
     matches!(args.get(i), Some(Value::Bool(true)))
 }
 
-pub(super) fn t_lock(_a: &[Value]) -> Value { outcome(lock_screen()) }
-pub(super) fn t_sleep(_a: &[Value]) -> Value { outcome(sleep()) }
-pub(super) fn t_sleep_displays(_a: &[Value]) -> Value { outcome(sleep_displays()) }
-pub(super) fn t_restart(_a: &[Value]) -> Value { outcome(restart()) }
-pub(super) fn t_shut_down(_a: &[Value]) -> Value { outcome(shut_down()) }
-pub(super) fn t_log_out(_a: &[Value]) -> Value { outcome(log_out()) }
-pub(super) fn t_screen_saver(_a: &[Value]) -> Value { outcome(screen_saver().then_some(()).ok_or_else(|| "could not start the screen saver".to_string())) }
+pub(super) fn t_lock(_a: &[Value]) -> Value {
+    outcome(lock_screen())
+}
+pub(super) fn t_sleep(_a: &[Value]) -> Value {
+    outcome(sleep())
+}
+pub(super) fn t_sleep_displays(_a: &[Value]) -> Value {
+    outcome(sleep_displays())
+}
+pub(super) fn t_restart(_a: &[Value]) -> Value {
+    outcome(restart())
+}
+pub(super) fn t_shut_down(_a: &[Value]) -> Value {
+    outcome(shut_down())
+}
+pub(super) fn t_log_out(_a: &[Value]) -> Value {
+    outcome(log_out())
+}
+pub(super) fn t_screen_saver(_a: &[Value]) -> Value {
+    outcome(
+        screen_saver()
+            .then_some(())
+            .ok_or_else(|| "could not start the screen saver".to_string()),
+    )
+}
 
 pub(super) fn t_empty_trash(args: &[Value]) -> Value {
     in_background(args.first(), empty_trash, outcome);
@@ -388,21 +536,33 @@ pub(super) fn t_dark_mode(_a: &[Value]) -> Value {
     dark_mode().map_or(Value::Null, Value::Bool)
 }
 
-pub(super) fn t_set_dark_mode(args: &[Value]) -> Value { outcome(set_dark_mode(flag(args, 0))) }
+pub(super) fn t_set_dark_mode(args: &[Value]) -> Value {
+    outcome(set_dark_mode(flag(args, 0)))
+}
 
 pub(super) fn t_volume(_a: &[Value]) -> Value {
     match volume() {
-        Ok((level, muted)) => obj(vec![("level", Value::Number(level)), ("muted", Value::Bool(muted))]),
+        Ok((level, muted)) => obj(vec![
+            ("level", Value::Number(level)),
+            ("muted", Value::Bool(muted)),
+        ]),
         Err(e) => obj(vec![("error", s(&e))]),
     }
 }
 
-pub(super) fn t_set_volume(args: &[Value]) -> Value { outcome(set_volume(num_arg(args, 0, 0.0))) }
-pub(super) fn t_set_muted(args: &[Value]) -> Value { outcome(set_mute(flag(args, 0))) }
+pub(super) fn t_set_volume(args: &[Value]) -> Value {
+    outcome(set_volume(num_arg(args, 0, 0.0)))
+}
+pub(super) fn t_set_muted(args: &[Value]) -> Value {
+    outcome(set_mute(flag(args, 0)))
+}
 
 pub(super) fn t_eject_all(args: &[Value]) -> Value {
     in_background(args.first(), eject_all, |(ejected, failed)| {
-        obj(vec![("ejected", arr(ejected.iter().map(|x| s(x)).collect())), ("failed", arr(failed.iter().map(|x| s(x)).collect()))])
+        obj(vec![
+            ("ejected", arr(ejected.iter().map(|x| s(x)).collect())),
+            ("failed", arr(failed.iter().map(|x| s(x)).collect())),
+        ])
     });
     Value::Null
 }
@@ -426,10 +586,22 @@ pub(super) fn t_running(_a: &[Value]) -> Value {
 
 pub(super) fn t_act(args: &[Value]) -> Value {
     match app_action(num_arg(args, 0, -1.0) as i32, &str_arg(args, 1)) {
-        Ok(m) => obj(vec![("ok", Value::Bool(true)), ("message", s(&m)), ("error", s(""))]),
-        Err(e) => obj(vec![("ok", Value::Bool(false)), ("message", s("")), ("error", s(&e))]),
+        Ok(m) => obj(vec![
+            ("ok", Value::Bool(true)),
+            ("message", s(&m)),
+            ("error", s("")),
+        ]),
+        Err(e) => obj(vec![
+            ("ok", Value::Bool(false)),
+            ("message", s("")),
+            ("error", s(&e)),
+        ]),
     }
 }
 
-pub(super) fn t_quit_all(_a: &[Value]) -> Value { Value::Number(quit_all() as f64) }
-pub(super) fn t_hide_all(_a: &[Value]) -> Value { Value::Number(hide_all() as f64) }
+pub(super) fn t_quit_all(_a: &[Value]) -> Value {
+    Value::Number(quit_all() as f64)
+}
+pub(super) fn t_hide_all(_a: &[Value]) -> Value {
+    Value::Number(hide_all() as f64)
+}

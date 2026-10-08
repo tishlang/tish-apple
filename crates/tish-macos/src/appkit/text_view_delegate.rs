@@ -7,9 +7,7 @@ use objc2_foundation::{NSNotification, NSObject, NSObjectProtocol};
 
 use tishlang_ui::runtime::run_with_current_root;
 
-use super::handlers::{
-    decode_control_tag, text_change_tag_from_text_view, TEXT_CHANGE_HANDLERS,
-};
+use super::handlers::{decode_control_tag, text_change_tag_from_text_view, TEXT_CHANGE_HANDLERS};
 
 define_class!(
     #[unsafe(super(NSObject))]
@@ -28,8 +26,7 @@ define_class!(
             let Some(tv) = obj.downcast_ref::<NSTextView>() else {
                 return;
             };
-            let tag = text_change_tag_from_text_view(tv)
-                .unwrap_or_else(|| tv.tag() as isize);
+            let tag = text_change_tag_from_text_view(tv).unwrap_or_else(|| tv.tag() as isize);
             if tag < 0 {
                 return;
             }

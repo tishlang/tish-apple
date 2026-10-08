@@ -8,7 +8,7 @@ use objc2_app_kit::{NSScreen, NSView, NSWindow};
 use objc2_core_foundation::CGSize;
 use objc2_foundation::NSString;
 use tishlang_core::{ObjectMap, PropMap, Value};
-use tishlang_ui::runtime::{current_root_id, LEGACY_ROOT_ID, RootId};
+use tishlang_ui::runtime::{current_root_id, RootId, LEGACY_ROOT_ID};
 
 use super::handlers::{
     detail_metrics_ptr_for_root, is_split_sidebar_collapsed, toggle_split_sidebar, window_for_root,
@@ -47,11 +47,9 @@ pub fn ns_window_object_for_root(root_id: RootId) -> Value {
     let rid = root_id;
     m.insert(
         Arc::from("title"),
-        Value::native(move |_a: &[Value]| {
-            match window_for_root(rid) {
-                Some(w) => Value::String(w.title().to_string().into()),
-                None => Value::Null,
-            }
+        Value::native(move |_a: &[Value]| match window_for_root(rid) {
+            Some(w) => Value::String(w.title().to_string().into()),
+            None => Value::Null,
         }),
     );
 
@@ -71,28 +69,24 @@ pub fn ns_window_object_for_root(root_id: RootId) -> Value {
     let rid = root_id;
     m.insert(
         Arc::from("innerWidth"),
-        Value::native(move |_a: &[Value]| {
-            match window_for_root(rid) {
-                Some(w) => {
-                    let r = w.contentLayoutRect();
-                    Value::Number(r.size.width as f64)
-                }
-                None => Value::Null,
+        Value::native(move |_a: &[Value]| match window_for_root(rid) {
+            Some(w) => {
+                let r = w.contentLayoutRect();
+                Value::Number(r.size.width as f64)
             }
+            None => Value::Null,
         }),
     );
 
     let rid = root_id;
     m.insert(
         Arc::from("innerHeight"),
-        Value::native(move |_a: &[Value]| {
-            match window_for_root(rid) {
-                Some(w) => {
-                    let r = w.contentLayoutRect();
-                    Value::Number(r.size.height as f64)
-                }
-                None => Value::Null,
+        Value::native(move |_a: &[Value]| match window_for_root(rid) {
+            Some(w) => {
+                let r = w.contentLayoutRect();
+                Value::Number(r.size.height as f64)
             }
+            None => Value::Null,
         }),
     );
 
@@ -205,9 +199,7 @@ pub fn ns_window_object_for_root(root_id: RootId) -> Value {
     let rid = root_id;
     m.insert(
         Arc::from("sidebarCollapsed"),
-        Value::native(move |_a: &[Value]| {
-            Value::Bool(is_split_sidebar_collapsed(rid))
-        }),
+        Value::native(move |_a: &[Value]| Value::Bool(is_split_sidebar_collapsed(rid))),
     );
 
     Value::object(m)
@@ -395,9 +387,7 @@ pub fn window_object() -> Value {
     );
     m.insert(
         Arc::from("sidebarCollapsed"),
-        Value::native(|_a: &[Value]| {
-            Value::Bool(is_split_sidebar_collapsed(effective_root_id()))
-        }),
+        Value::native(|_a: &[Value]| Value::Bool(is_split_sidebar_collapsed(effective_root_id()))),
     );
 
     Value::object(m)

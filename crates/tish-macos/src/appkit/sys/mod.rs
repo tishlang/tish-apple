@@ -1,5 +1,5 @@
 //! macOS services that aren't UI: time zones, the dictionary, the pasteboard, files and apps
-//! (NSWorkspace), folder watching (FSEvents) and URL schemes. Each is a namespace on `macos`
+//! (NSWorkspace), folder watching (FSEvents), URL schemes and shell commands. Each is a namespace on `macos`
 //! (`macos.timeZones`, `macos.dictionary`, …); callbacks run on the main thread.
 
 mod accessibility;
@@ -9,10 +9,11 @@ mod folders;
 mod icons;
 mod openurl;
 mod pasteboard;
+mod shell;
 mod spotlight;
 mod statusitem;
-mod system;
 mod sysinfo;
+mod system;
 mod timezones;
 mod workspace;
 
@@ -59,19 +60,34 @@ pub(crate) fn call(cb: &Value, args: &[Value]) {
 }
 
 fn namespace(fns: Vec<(&str, fn(&[Value]) -> Value)>) -> Value {
-    obj(fns.into_iter().map(|(k, f)| (k, Value::native(f))).collect())
+    obj(fns
+        .into_iter()
+        .map(|(k, f)| (k, Value::native(f)))
+        .collect())
 }
 
 /// Add the namespaces to the `macos` object.
 pub(crate) fn install(macos: &mut ObjectMap) {
     macos.insert(
         Arc::from("timeZones"),
-        namespace(vec![("names", timezones::names), ("local", timezones::local), ("at", timezones::at), ("byAbbreviation", timezones::by_abbreviation)]),
+        namespace(vec![
+            ("names", timezones::names),
+            ("local", timezones::local),
+            ("at", timezones::at),
+            ("byAbbreviation", timezones::by_abbreviation),
+        ]),
     );
-    macos.insert(Arc::from("dictionary"), namespace(vec![("lookup", dictionary::lookup)]));
+    macos.insert(
+        Arc::from("dictionary"),
+        namespace(vec![("lookup", dictionary::lookup)]),
+    );
     macos.insert(
         Arc::from("pasteboard"),
-        namespace(vec![("readText", pasteboard::read_text), ("writeText", pasteboard::write_text), ("watch", pasteboard::watch)]),
+        namespace(vec![
+            ("readText", pasteboard::read_text),
+            ("writeText", pasteboard::write_text),
+            ("watch", pasteboard::watch),
+        ]),
     );
     macos.insert(
         Arc::from("workspace"),
@@ -104,30 +120,61 @@ pub(crate) fn install(macos: &mut ObjectMap) {
     );
     macos.insert(
         Arc::from("apps"),
-        namespace(vec![("running", system::t_running), ("act", system::t_act), ("quitAll", system::t_quit_all), ("hideAll", system::t_hide_all)]),
+        namespace(vec![
+            ("running", system::t_running),
+            ("act", system::t_act),
+            ("quitAll", system::t_quit_all),
+            ("hideAll", system::t_hide_all),
+        ]),
     );
+    macos.insert(Arc::from("shell"), namespace(vec![("run", shell::run)]));
     macos.insert(Arc::from("systemInfo"), Value::native(sysinfo::system_info));
     macos.insert(
         Arc::from("contacts"),
-        namespace(vec![("status", contacts::t_status), ("request", contacts::t_request), ("query", contacts::t_search)]),
+        namespace(vec![
+            ("status", contacts::t_status),
+            ("request", contacts::t_request),
+            ("query", contacts::t_search),
+        ]),
     );
     macos.insert(
         Arc::from("accessibility"),
         namespace(vec![
             ("trusted", accessibility::t_trusted),
             ("selectedText", accessibility::t_selected_text),
-            ("replaceBeforeCursor", accessibility::t_replace_before_cursor),
+            (
+                "replaceBeforeCursor",
+                accessibility::t_replace_before_cursor,
+            ),
             ("focusedWindow", accessibility::t_focused_window),
-            ("setFocusedWindowFrame", accessibility::t_set_focused_window_frame),
+            (
+                "setFocusedWindowFrame",
+                accessibility::t_set_focused_window_frame,
+            ),
+            ("windowAction", accessibility::t_window_action),
         ]),
     );
-    macos.insert(Arc::from("screens"), Value::native(accessibility::t_screens));
-    macos.insert(Arc::from("spotlight"), namespace(vec![("query", spotlight::query)]));
+    macos.insert(
+        Arc::from("screens"),
+        Value::native(accessibility::t_screens),
+    );
+    macos.insert(
+        Arc::from("spotlight"),
+        namespace(vec![("query", spotlight::query)]),
+    );
     macos.insert(
         Arc::from("icons"),
-        namespace(vec![("file", icons::file), ("symbol", icons::symbol), ("image", icons::image), ("onLoaded", icons::on_loaded)]),
+        namespace(vec![
+            ("file", icons::file),
+            ("symbol", icons::symbol),
+            ("image", icons::image),
+            ("onLoaded", icons::on_loaded),
+        ]),
     );
-    macos.insert(Arc::from("statusItem"), Value::native(statusitem::status_item));
+    macos.insert(
+        Arc::from("statusItem"),
+        Value::native(statusitem::status_item),
+    );
     macos.insert(Arc::from("watchFolders"), Value::native(folders::watch));
     macos.insert(Arc::from("onOpenUrl"), Value::native(openurl::on_open_url));
 }
@@ -161,7 +208,11 @@ pub(crate) fn deliver<T: Send + 'static>(id: u64, data: T, make: fn(T) -> Value)
 
 /// Run `work` on a background thread, then `cb(make(result))` on the main thread. Only `work`'s
 /// plain result crosses threads; the callback stays on the main thread.
-pub(crate) fn in_background<T: Send + 'static>(cb: Option<&Value>, work: impl FnOnce() -> T + Send + 'static, make: fn(T) -> Value) {
+pub(crate) fn in_background<T: Send + 'static>(
+    cb: Option<&Value>,
+    work: impl FnOnce() -> T + Send + 'static,
+    make: fn(T) -> Value,
+) {
     let id = hold(cb);
     std::thread::spawn(move || deliver(id, work(), make));
 }

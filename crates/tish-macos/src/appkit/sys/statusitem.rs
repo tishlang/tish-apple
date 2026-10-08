@@ -13,7 +13,10 @@ use std::cell::RefCell;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject};
 use objc2::{define_class, msg_send, sel, MainThreadMarker, MainThreadOnly};
-use objc2_app_kit::{NSApplication, NSEventMask, NSEventModifierFlags, NSEventType, NSImage, NSMenu, NSMenuItem, NSStatusBar, NSStatusItem};
+use objc2_app_kit::{
+    NSApplication, NSEventMask, NSEventModifierFlags, NSEventType, NSImage, NSMenu, NSMenuItem,
+    NSStatusBar, NSStatusItem,
+};
 use objc2_foundation::NSString;
 use tishlang_core::Value;
 
@@ -102,14 +105,31 @@ fn text(o: &tishlang_core::PropMap, k: &str) -> String {
 }
 
 fn parse(v: Option<&Value>) -> Options {
-    let mut out = Options { image: String::new(), title: String::new(), tooltip: String::new(), menu: Vec::new(), on_click: None, on_menu: None };
-    let Some(Value::Object(o)) = v else { return out };
+    let mut out = Options {
+        image: String::new(),
+        title: String::new(),
+        tooltip: String::new(),
+        menu: Vec::new(),
+        on_click: None,
+        on_menu: None,
+    };
+    let Some(Value::Object(o)) = v else {
+        return out;
+    };
     let o = o.borrow();
     out.image = text(&o.strings, "image");
     out.title = text(&o.strings, "title");
     out.tooltip = text(&o.strings, "tooltip");
-    out.on_click = o.strings.get("onClick").filter(|v| matches!(v, Value::Function(_))).cloned();
-    out.on_menu = o.strings.get("onMenu").filter(|v| matches!(v, Value::Function(_))).cloned();
+    out.on_click = o
+        .strings
+        .get("onClick")
+        .filter(|v| matches!(v, Value::Function(_)))
+        .cloned();
+    out.on_menu = o
+        .strings
+        .get("onMenu")
+        .filter(|v| matches!(v, Value::Function(_)))
+        .cloned();
     if let Some(Value::Array(items)) = o.strings.get("menu") {
         for it in items.borrow().iter() {
             let Value::Object(e) = it else { continue };
@@ -134,8 +154,19 @@ fn build_menu(mtm: MainThreadMarker, target: &MenuTarget, entries: &[Entry]) -> 
             menu.addItem(&NSMenuItem::separatorItem(mtm));
             continue;
         }
-        let action = if e.enabled { Some(sel!(menuPicked:)) } else { None };
-        let mi = unsafe { NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &NSString::from_str(&e.title), action, &NSString::from_str(&e.key)) };
+        let action = if e.enabled {
+            Some(sel!(menuPicked:))
+        } else {
+            None
+        };
+        let mi = unsafe {
+            NSMenuItem::initWithTitle_action_keyEquivalent(
+                NSMenuItem::alloc(mtm),
+                &NSString::from_str(&e.title),
+                action,
+                &NSString::from_str(&e.key),
+            )
+        };
         mi.setTag(i as isize);
         mi.setEnabled(e.enabled);
         unsafe { mi.setTarget(Some(target)) };
@@ -145,12 +176,25 @@ fn build_menu(mtm: MainThreadMarker, target: &MenuTarget, entries: &[Entry]) -> 
 }
 
 fn entries() -> Vec<Entry> {
-    OPTIONS.with(|o| o.borrow().as_ref().map(|o| o.menu.clone()).unwrap_or_default())
+    OPTIONS.with(|o| {
+        o.borrow()
+            .as_ref()
+            .map(|o| o.menu.clone())
+            .unwrap_or_default()
+    })
 }
 
 fn install() {
-    let Some(mtm) = MainThreadMarker::new() else { return };
-    let Some((image, title, tooltip)) = OPTIONS.with(|o| o.borrow().as_ref().map(|o| (o.image.clone(), o.title.clone(), o.tooltip.clone()))) else { return };
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let Some((image, title, tooltip)) = OPTIONS.with(|o| {
+        o.borrow()
+            .as_ref()
+            .map(|o| (o.image.clone(), o.title.clone(), o.tooltip.clone()))
+    }) else {
+        return;
+    };
     let existing = INSTALLED.with(|i| i.borrow().is_some());
     if !existing {
         // NSVariableStatusItemLength
@@ -159,7 +203,16 @@ fn install() {
         if let Some(button) = item.button(mtm) {
             let label = NSString::from_str(if title.is_empty() { "•" } else { &title });
             let ns_image = NSString::from_str(&image);
-            let img = if image.is_empty() { None } else { NSImage::imageNamed(&ns_image).or_else(|| NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns_image, Some(&label))) };
+            let img = if image.is_empty() {
+                None
+            } else {
+                NSImage::imageNamed(&ns_image).or_else(|| {
+                    NSImage::imageWithSystemSymbolName_accessibilityDescription(
+                        &ns_image,
+                        Some(&label),
+                    )
+                })
+            };
             match img {
                 Some(img) => {
                     img.setTemplate(true);
@@ -174,7 +227,13 @@ fn install() {
             button.sendActionOn(NSEventMask::LeftMouseUp | NSEventMask::RightMouseUp);
         }
         let menu = build_menu(mtm, &target, &entries());
-        INSTALLED.with(|i| *i.borrow_mut() = Some(Installed { item, menu, _target: target }));
+        INSTALLED.with(|i| {
+            *i.borrow_mut() = Some(Installed {
+                item,
+                menu,
+                _target: target,
+            })
+        });
     } else {
         INSTALLED.with(|i| {
             let mut i = i.borrow_mut();

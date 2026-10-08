@@ -12,22 +12,23 @@
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
 use objc2_app_kit::{
-    NSColor, NSControlSize, NSFont, NSFontWeightSemibold, NSScroller, NSScrollerStyle, NSScrollView,
-    NSTextField, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState,
+    NSColor, NSControlSize, NSFont, NSFontWeightSemibold, NSScrollView, NSScroller,
+    NSScrollerStyle, NSTextField, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial,
+    NSVisualEffectState,
 };
 use objc2_core_foundation::{CGPoint, CGSize};
 use objc2_foundation::{NSEdgeInsets, NSRect, NSString};
-use tishlang_core::{ObjectMap, PropMap};
 use tishlang_core::Value;
+use tishlang_core::{ObjectMap, PropMap};
 
 use super::build::{
     collect_element_vnodes, commit_vnode, freeze_autoresizing_for_manual_frames,
     strip_scroll_content_insets, tune_scroll_view_chrome, vnode_children, vnode_props, BuildCtx,
 };
+use super::canonical_host_tag;
 use super::flipped::{FlippedClipView, FlippedDocumentView, FlippedVisualEffectView};
 use super::scroll_chrome_embed::mark_grouped_table_scroll;
 use super::style::apply_static_label_text_field;
-use super::canonical_host_tag;
 
 /// Width reserved for a **legacy** vertical scroller (`NSScrollerStyle::Legacy`) so document rows
 /// match the clip view and do not sit under the knob.
@@ -41,14 +42,8 @@ fn legacy_vertical_scroller_lane(mtm: MainThreadMarker) -> f64 {
 
 /// One logical row: vibrancy group header or a Tish-built content view.
 pub(super) enum GroupedTableRow {
-    Group {
-        view: Retained<NSView>,
-        height: f64,
-    },
-    Item {
-        view: Retained<NSView>,
-        height: f64,
-    },
+    Group { view: Retained<NSView>, height: f64 },
+    Item { view: Retained<NSView>, height: f64 },
 }
 
 const ZERO_EDGE_INSETS: NSEdgeInsets = NSEdgeInsets {
@@ -162,8 +157,7 @@ pub(super) fn build_grouped_table_rows(
 }
 
 fn grouped_rows_total_height(rows: &[GroupedTableRow]) -> f64 {
-    rows
-        .iter()
+    rows.iter()
         .map(|r| match r {
             GroupedTableRow::Group { height, .. } | GroupedTableRow::Item { height, .. } => *height,
         })
@@ -196,12 +190,7 @@ pub(super) fn install_grouped_table_scroll(
 
     let lane = legacy_vertical_scroller_lane(mtm);
     let cw = (content_w - lane).max(1.0);
-    let rows_vec = build_grouped_table_rows(
-        grouped_children,
-        cw,
-        ctx,
-        vibrant_section_headers,
-    );
+    let rows_vec = build_grouped_table_rows(grouped_children, cw, ctx, vibrant_section_headers);
     let doc_h = (grouped_rows_total_height(&rows_vec) + inset).max(1.0);
 
     let clip_frame = scroll.contentView().frame();
@@ -211,20 +200,14 @@ pub(super) fn install_grouped_table_scroll(
     scroll.setContentView(&flipped_clip);
     strip_scroll_content_insets(&scroll);
 
-    let doc = FlippedDocumentView::new(
-        mtm,
-        NSRect::new(CGPoint::ZERO, CGSize::new(cw, 0.0)),
-    );
+    let doc = FlippedDocumentView::new(mtm, NSRect::new(CGPoint::ZERO, CGSize::new(cw, 0.0)));
     let mut dy = inset;
     for row in rows_vec {
         let (view, h) = match row {
             GroupedTableRow::Group { view, height } => (view, height),
             GroupedTableRow::Item { view, height } => (view, height),
         };
-        view.setFrame(NSRect::new(
-            CGPoint::new(0.0, dy),
-            CGSize::new(cw, h),
-        ));
+        view.setFrame(NSRect::new(CGPoint::new(0.0, dy), CGSize::new(cw, h)));
         freeze_autoresizing_for_manual_frames(&*view);
         doc.addSubview(&*view);
         dy += h;

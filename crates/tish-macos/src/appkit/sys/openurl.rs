@@ -48,8 +48,12 @@ define_class!(
 );
 
 pub(super) fn on_open_url(args: &[Value]) -> Value {
-    let Some(mtm) = MainThreadMarker::new() else { return Value::Bool(false) };
-    let Some(cls) = AnyClass::get(c"NSAppleEventManager") else { return Value::Bool(false) };
+    let Some(mtm) = MainThreadMarker::new() else {
+        return Value::Bool(false);
+    };
+    let Some(cls) = AnyClass::get(c"NSAppleEventManager") else {
+        return Value::Bool(false);
+    };
     OPEN_URL.with(|h| *h.borrow_mut() = args.first().cloned());
     let target: Retained<UrlTarget> = unsafe { msg_send![UrlTarget::alloc(mtm), init] };
     unsafe {

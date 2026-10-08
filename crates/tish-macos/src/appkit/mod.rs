@@ -1,32 +1,35 @@
 //! AppKit host: `macos.run`, vnode commit, `window` API.
 
 mod async_api;
-mod sys;
 mod build;
-mod prop_warn;
-mod scroll_chrome_embed;
-mod grouped_table;
-mod markdown_view;
-mod prefs;
-mod notifications;
 mod deferred_host;
-mod style;
 mod flipped;
+mod grouped_table;
 mod handlers;
 mod hover;
-mod window_delegate;
+mod markdown_view;
+mod notifications;
 mod patch;
+mod prefs;
+mod prop_warn;
 mod router;
-mod sidebar_host;
+mod scroll_chrome_embed;
 pub(crate) mod session_bus;
+mod sidebar_host;
+mod style;
+mod sys;
 mod text_delegate;
 mod text_view_delegate;
 mod toolbar_delegate;
 pub(crate) mod webview_bridge;
 mod window_api;
+mod window_delegate;
 
+pub use notifications::{
+    permission_state as notification_permission_state,
+    request_permission as notification_request_permission, show as notification_show,
+};
 pub use webview_bridge::{broadcast_event, broker_try_invoke as webview_broker_try_invoke};
-pub use notifications::{permission_state as notification_permission_state, request_permission as notification_request_permission, show as notification_show};
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -35,6 +38,7 @@ use std::sync::Arc;
 
 use block2::RcBlock;
 use core::ptr::NonNull;
+use dispatch2::DispatchQueue;
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
 use objc2::{sel, MainThreadMarker, MainThreadOnly};
@@ -47,7 +51,6 @@ use objc2_app_kit::{
 use objc2_core_foundation::{CGPoint, CGSize};
 use objc2_foundation::{NSRect, NSString, NSTimer};
 use tishlang_core::{ObjectMap, PropMap, Value};
-use dispatch2::DispatchQueue;
 use tishlang_ui::runtime::{
     alloc_root_id, install_host_for_root, native_create_root, with_host_for_root, Host, RootId,
     LEGACY_ROOT_ID,
@@ -73,10 +76,10 @@ use handlers::{
     window_for_root, MACOS_MAIN_WINDOW,
 };
 use router::MacosControlRouter;
-use sidebar_host::MacosSidebarHost;
 use session_bus::{
     ensure_session_id, on_session_message, post_session_message, spawn_peer_process,
 };
+use sidebar_host::MacosSidebarHost;
 use text_delegate::TextFieldDelegate;
 use text_view_delegate::TextViewDelegate;
 use toolbar_delegate::TishToolbarDelegate;
@@ -108,7 +111,11 @@ fn run_with_sidebar_toolbar_chrome_options(value: Option<&Value>) -> (bool, bool
     (
         optional_bool_prop(
             m,
-            &["sidebarToolbarToggle", "sidebar_toggle", "showSidebarToolbarToggle"],
+            &[
+                "sidebarToolbarToggle",
+                "sidebar_toggle",
+                "showSidebarToolbarToggle",
+            ],
             true,
         ),
         optional_bool_prop(
@@ -155,7 +162,9 @@ fn toolbar_chrome_from_sidebar_vnode(v: &Value) -> (bool, bool) {
         return (true, true);
     }
     let props_val = match v {
-        Value::Object(o) => Value::object(propmap_to_object_map(&build::vnode_props(&o.borrow().strings))),
+        Value::Object(o) => Value::object(propmap_to_object_map(&build::vnode_props(
+            &o.borrow().strings,
+        ))),
         _ => Value::Null,
     };
     run_with_sidebar_toolbar_chrome_options(Some(&props_val))
@@ -187,9 +196,8 @@ fn queue_host_relayout_after_layout(root_id: RootId, width: f64) {
         RELAYOUT_TIMER_SCHEDULED.set(false);
         drain_pending_host_relayout();
     });
-    let _timer = unsafe {
-        NSTimer::scheduledTimerWithTimeInterval_repeats_block(0.0, false, &*block)
-    };
+    let _timer =
+        unsafe { NSTimer::scheduledTimerWithTimeInterval_repeats_block(0.0, false, &*block) };
     drop(_timer);
 }
 
@@ -220,10 +228,7 @@ pub(super) fn notify_root_layout_changed(root_id: RootId, width: f64, height: f6
             .copied()
             .unwrap_or((f64::NAN, f64::NAN))
     });
-    if !pw.is_nan()
-        && (pw - width).abs() < 0.5
-        && (ph - height).abs() < 0.5
-    {
+    if !pw.is_nan() && (pw - width).abs() < 0.5 && (ph - height).abs() < 0.5 {
         return;
     }
     LAST_NOTIFIED_SIZE.with(|m| {
@@ -302,8 +307,7 @@ impl MacosHost {
         // state where messaging it crashes (`objc_msgSend` → `setDelegate:`); dropping our
         // `Retained<NSWindow>` when the host is released tears down the delegate link safely.
         self.root.disconnect_tish_root_routing();
-        let root_ns: &NSView =
-            unsafe { &*std::ptr::from_ref(&*self.root).cast::<NSView>() };
+        let root_ns: &NSView = unsafe { &*std::ptr::from_ref(&*self.root).cast::<NSView>() };
         build::detach_appkit_control_hooks_under(root_ns);
         // Do not call `setContentView(None)` here: `windowWillClose:` can overlap
         // `NSWindowTransformAnimation`; clearing the content view early tears down CALayers while
@@ -342,7 +346,6 @@ impl Host for MacosHost {
         self.relayout_with_width(width);
         IN_HOST_RELAYOUT.set(false);
     }
-
 
     fn after_window_shown(&mut self) {
         self.window_delegate.fire_on_open();
@@ -430,9 +433,8 @@ fn install_timer_drain_pump() {
     });
     // `scheduledTimerWithTimeInterval:repeats:block:` schedules on the current run loop, which
     // retains the timer; dropping our `Retained` is safe after this returns.
-    let _timer = unsafe {
-        NSTimer::scheduledTimerWithTimeInterval_repeats_block(0.032, true, &*block)
-    };
+    let _timer =
+        unsafe { NSTimer::scheduledTimerWithTimeInterval_repeats_block(0.032, true, &*block) };
     drop(_timer);
 }
 
@@ -595,10 +597,7 @@ fn create_content_host(
     root_id: RootId,
     open_opts: Option<&Value>,
 ) -> (Retained<NSWindow>, MacosRealHost) {
-    let frame = NSRect::new(
-        CGPoint::new(60.0, 60.0),
-        CGSize::new(1100.0, 640.0),
-    );
+    let frame = NSRect::new(CGPoint::new(60.0, 60.0), CGSize::new(1100.0, 640.0));
     let style = NSWindowStyleMask::Closable
         | NSWindowStyleMask::Miniaturizable
         | NSWindowStyleMask::Resizable
@@ -632,8 +631,7 @@ fn create_content_host(
         root_id,
     );
     root.setAutoresizingMask(
-        NSAutoresizingMaskOptions::ViewWidthSizable
-            | NSAutoresizingMaskOptions::ViewHeightSizable,
+        NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable,
     );
     window.setContentView(Some(&root));
 
@@ -671,10 +669,7 @@ fn create_sidebar_host(
     open_opts: Option<&Value>,
 ) -> (Retained<NSWindow>, MacosRealHost) {
     let (show_sidebar_toggle, show_sidebar_tracking_separator) = chrome;
-    let frame = NSRect::new(
-        CGPoint::new(80.0, 80.0),
-        CGSize::new(900.0, 560.0),
-    );
+    let frame = NSRect::new(CGPoint::new(80.0, 80.0), CGSize::new(900.0, 560.0));
     let style = NSWindowStyleMask::Closable
         | NSWindowStyleMask::Miniaturizable
         | NSWindowStyleMask::Resizable
@@ -707,11 +702,8 @@ fn create_sidebar_host(
 
     let tb_id = NSString::from_str("TishSidebarToolbar");
     let toolbar = NSToolbar::initWithIdentifier(NSToolbar::alloc(mtm), &tb_id);
-    let toolbar_delegate = TishToolbarDelegate::new_legacy(
-        mtm,
-        show_sidebar_toggle,
-        show_sidebar_tracking_separator,
-    );
+    let toolbar_delegate =
+        TishToolbarDelegate::new_legacy(mtm, show_sidebar_toggle, show_sidebar_tracking_separator);
     toolbar.setDelegate(Some(ProtocolObject::from_ref(&*toolbar_delegate)));
 
     let split_vc = NSSplitViewController::new(mtm);
@@ -721,13 +713,11 @@ fn create_sidebar_host(
     let zero = NSRect::new(CGPoint::ZERO, CGSize::new(200.0, 400.0));
     let sidebar_root = FlippedSplitPaneRootView::new(mtm, zero, root_id);
     sidebar_root.setAutoresizingMask(
-        NSAutoresizingMaskOptions::ViewWidthSizable
-            | NSAutoresizingMaskOptions::ViewHeightSizable,
+        NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable,
     );
     let detail_root = FlippedSplitPaneRootView::new(mtm, zero, root_id);
     detail_root.setAutoresizingMask(
-        NSAutoresizingMaskOptions::ViewWidthSizable
-            | NSAutoresizingMaskOptions::ViewHeightSizable,
+        NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable,
     );
 
     let sidebar_view: &NSView = unsafe { &*std::ptr::from_ref(&*sidebar_root).cast() };
@@ -873,21 +863,14 @@ fn macos_shell_element(tag: &'static str, args: &[Value]) -> Value {
             map.remove(&Arc::from("children"));
             (Value::object(propmap_to_object_map(&map)), ch)
         }
-        _ => (
-            Value::Null,
-            Value::array(vec![]),
-        ),
+        _ => (Value::Null, Value::array(vec![])),
     };
     let norm_children = match children_arg {
         Value::Array(a) => Value::Array(a),
         Value::Null => Value::array(vec![]),
         other => Value::array(vec![other]),
     };
-    ui_h(&[
-        Value::String(tag.into()),
-        props_obj,
-        norm_children,
-    ])
+    ui_h(&[Value::String(tag.into()), props_obj, norm_children])
 }
 
 fn macos_shell_sidebar_window(args: &[Value]) -> Value {
@@ -1059,14 +1042,15 @@ pub fn macos_object() -> Value {
     );
     macos_inner.insert(Arc::from("postSessionMessage"), post_sess.clone());
     macos_inner.insert(Arc::from("onSessionMessage"), on_sess.clone());
-    macos_inner.insert(
-        Arc::from("spawnPeer"),
-        Value::native(spawn_peer_process),
-    );
+    macos_inner.insert(Arc::from("spawnPeer"), Value::native(spawn_peer_process));
     macos_inner.insert(
         Arc::from("isPeerChild"),
         Value::native(|_| {
-            Value::Bool(std::env::var("TISH_MACOS_CHILD").map(|s| s == "1").unwrap_or(false))
+            Value::Bool(
+                std::env::var("TISH_MACOS_CHILD")
+                    .map(|s| s == "1")
+                    .unwrap_or(false),
+            )
         }),
     );
     macos_inner.insert(
@@ -1087,7 +1071,10 @@ pub fn macos_object() -> Value {
             Value::Null
         }),
     );
-    macos_inner.insert(Arc::from("whenSettled"), Value::native(async_api::when_settled));
+    macos_inner.insert(
+        Arc::from("whenSettled"),
+        Value::native(async_api::when_settled),
+    );
     macos_inner.insert(
         Arc::from("startTimers"),
         Value::native(|_| {
@@ -1134,10 +1121,7 @@ pub fn macos_object() -> Value {
         Arc::from("useEffect"),
         Value::native(tishlang_ui::runtime::native_use_effect),
     );
-    root.insert(
-        Arc::from("Window"),
-        Value::native(macos_shell_window),
-    );
+    root.insert(Arc::from("Window"), Value::native(macos_shell_window));
     root.insert(
         Arc::from("SidebarWindow"),
         Value::native(macos_shell_sidebar_window),

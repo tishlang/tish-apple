@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use objc2::rc::Retained;
 use objc2_app_kit::{
-    NSUserInterfaceItemIdentification, NSSplitViewController, NSTextView, NSWindow,
+    NSSplitViewController, NSTextView, NSUserInterfaceItemIdentification, NSWindow,
 };
 use objc2_foundation::NSString;
 use tishlang_ui::runtime::{RootId, LEGACY_ROOT_ID};
@@ -63,9 +63,7 @@ pub fn text_change_tag_from_text_view(tv: &NSTextView) -> Option<isize> {
 
 #[inline]
 pub fn encode_toolbar_tag(root_id: RootId, idx: usize) -> isize {
-    (((root_id as u64) << 32)
-        | TOOLBAR_TAG_LOW_MARKER
-        | (idx as u64 & 0x7FFF_FFFF)) as i64 as isize
+    (((root_id as u64) << 32) | TOOLBAR_TAG_LOW_MARKER | (idx as u64 & 0x7FFF_FFFF)) as i64 as isize
 }
 
 #[inline]
@@ -91,14 +89,12 @@ pub fn clear_toolbar_handlers(root_id: RootId) {
 }
 
 pub fn set_toolbar_action_callback(root_id: RootId, f: Option<Rc<dyn Fn(String)>>) {
-    TOOLBAR_ACTION_CALLBACK.with(|m| {
-        match f {
-            Some(cb) => {
-                m.borrow_mut().insert(root_id, Some(cb));
-            }
-            None => {
-                m.borrow_mut().remove(&root_id);
-            }
+    TOOLBAR_ACTION_CALLBACK.with(|m| match f {
+        Some(cb) => {
+            m.borrow_mut().insert(root_id, Some(cb));
+        }
+        None => {
+            m.borrow_mut().remove(&root_id);
         }
     });
 }
@@ -193,8 +189,7 @@ pub fn is_split_sidebar_collapsed(root_id: RootId) -> bool {
 }
 
 pub fn detail_metrics_ptr_for_root(root_id: RootId) -> usize {
-    DETAIL_METRICS_PTR_BY_ROOT
-        .with(|m| *m.borrow().get(&root_id).unwrap_or(&0))
+    DETAIL_METRICS_PTR_BY_ROOT.with(|m| *m.borrow().get(&root_id).unwrap_or(&0))
 }
 
 pub fn set_detail_metrics_for_root(root_id: RootId, ptr: usize) {
@@ -224,7 +219,6 @@ pub fn clear_handlers_for_root(root_id: RootId) {
         c.borrow_mut().remove(&root_id);
     });
 }
-
 
 pub fn register_text_change_handler(root_id: RootId, f: Rc<dyn Fn(String)>) -> isize {
     TEXT_CHANGE_HANDLERS.with(|c| {
@@ -272,11 +266,7 @@ fn ensure_vec_len<T>(v: &mut Vec<Option<T>>, len: usize) {
     }
 }
 
-pub fn update_text_change_handler(
-    root_id: RootId,
-    idx: usize,
-    f: Rc<dyn Fn(String)>,
-) -> isize {
+pub fn update_text_change_handler(root_id: RootId, idx: usize, f: Rc<dyn Fn(String)>) -> isize {
     TEXT_CHANGE_HANDLERS.with(|c| {
         let mut m = c.borrow_mut();
         let v = m.entry(root_id).or_default();
@@ -285,7 +275,6 @@ pub fn update_text_change_handler(
     });
     encode_control_tag(root_id, idx)
 }
-
 
 pub fn update_bool_handler(root_id: RootId, idx: usize, f: Rc<dyn Fn(bool)>) -> isize {
     BOOL_HANDLERS.with(|c| {
